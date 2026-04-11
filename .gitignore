@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Fichiers design / travail temporaire
+Design sans titre*
+*.html
+!index.html
+logo_diogene.*
+"Logo Diogène.*"

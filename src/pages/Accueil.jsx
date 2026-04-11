@@ -52,7 +52,7 @@ export default function Accueil() {
       {/* ── Logo ────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center mb-8 select-none">
         <img
-          src="/logo.png"
+          src="/logo.jpeg"
           alt="Logo Diogène"
           className="w-52 h-52 object-contain drop-shadow-md"
           draggable={false}
