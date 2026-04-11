@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Notes du chef de chœur — lecture publique, écriture publique
+    // (la protection est assurée par le code PIN dans l'application)
+    match /directorNotes/{songKey} {
+      allow read:  if true;
+      allow write: if true;
+    }
+
+    // Tout le reste est interdit
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

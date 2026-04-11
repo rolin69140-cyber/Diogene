@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  --color-basse: #185FA5;
+  --color-alti: #534AB7;
+  --color-soprano: #D85A30;
+  --color-tenor: #3B6D11;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empêche le scroll rebond iOS en mode concert */
+.no-bounce {
+  overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
