@@ -1,9 +1,23 @@
 import { Component } from 'react'
 
+function isChunkError(msg) {
+  return msg && (
+    msg.includes('dynamically imported module') ||
+    msg.includes('Failed to fetch dynamically') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Unable to preload CSS')
+  )
+}
+
 export default class ErrorBoundary extends Component {
   state = { error: null }
 
   static getDerivedStateFromError(error) {
+    // Chunk obsolète après déploiement → rechargement automatique
+    if (isChunkError(error?.message)) {
+      window.location.reload()
+      return { error: null }
+    }
     return { error }
   }
 

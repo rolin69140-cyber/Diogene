@@ -1,4 +1,13 @@
 import { StrictMode } from 'react'
+
+// Rechargement automatique si un chunk JS est obsolète après déploiement
+window.addEventListener('vite:preloadError', () => window.location.reload())
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = e?.reason?.message || ''
+  if (msg.includes('dynamically imported module') || msg.includes('Failed to fetch dynamically')) {
+    window.location.reload()
+  }
+})
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
