@@ -244,7 +244,8 @@ export default function Repetition() {
 
   const activeSong = songs.find((s) => s.id === activeSongId)
   const buttonSize = settings.buttonSize || 'normal'
-  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24 text-3xl' : buttonSize === 'grand' ? 'w-20 h-20 text-2xl' : 'w-16 h-16 text-xl'
+  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
+  const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
   const activeSet = sets.find((s) => s.id === activeSetId)
   const setFilteredSongs = activeSet
@@ -321,7 +322,7 @@ export default function Repetition() {
               <div key={p} className="relative flex flex-col items-center gap-1">
                 {/* Bouton principal — tap = note courte, maintenir = note tenue */}
                 <button
-                  style={{ backgroundColor: color, ...(displayLabel.length > 2 ? { fontSize: displayLabel.length > 6 ? '10px' : displayLabel.length > 4 ? '12px' : '14px', lineHeight: 1.2 } : {}) }}
+                  style={{ backgroundColor: color, fontSize: displayLabel.length > 6 ? Math.min(10, baseFontSize) : displayLabel.length > 4 ? Math.min(13, baseFontSize) : displayLabel.length > 2 ? Math.min(16, baseFontSize) : baseFontSize, lineHeight: 1.2 }}
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative overflow-hidden`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)

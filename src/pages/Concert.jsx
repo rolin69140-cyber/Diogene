@@ -210,7 +210,8 @@ export default function Concert() {
   const currentSong = setSongs[activeSongIdx] || null
 
   const buttonSize = settings.buttonSize || 'normal'
-  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24 text-3xl' : buttonSize === 'grand' ? 'w-20 h-20 text-2xl' : 'w-16 h-16 text-xl'
+  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
+  const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
   const availablePupitres = currentSong
     ? Array.from(new Set((currentSong.audioButtons || []).flatMap((b) => b.pupitres || [])))
@@ -280,12 +281,12 @@ export default function Concert() {
             const hasLyrics = !!(currentSong?.lyricsText || songPdfs.length > 0)
 
             const btnLabel = isMine ? 'Ma voix' : (customLabel || p)
-            const btnFontSize = btnLabel.length > 6 ? '10px' : btnLabel.length > 4 ? '12px' : btnLabel.length > 2 ? '14px' : null
+            const btnFontSize = btnLabel.length > 6 ? Math.min(10, baseFontSize) : btnLabel.length > 4 ? Math.min(13, baseFontSize) : btnLabel.length > 2 ? Math.min(16, baseFontSize) : baseFontSize
 
             return (
               <div key={p} className="relative flex flex-col items-center gap-1">
                 <button
-                  style={{ backgroundColor: color, ...(btnFontSize ? { fontSize: btnFontSize, lineHeight: 1.2 } : {}) }}
+                  style={{ backgroundColor: color, fontSize: btnFontSize, lineHeight: 1.2 }}
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative overflow-hidden`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
