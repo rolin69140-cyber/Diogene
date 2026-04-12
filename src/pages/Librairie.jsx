@@ -458,6 +458,8 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
     PUPITRES.forEach((p) => { init[p] = parseNotes2(song.attackNotes?.[p]) })
     return init
   })
+  const [editCueText, setEditCueText] = useState(song.cueText || '')
+  const [editCueSize, setEditCueSize] = useState(song.cueTextSize || 'base')
   const updateSong = useStore((s) => s.updateSong)
   const updateButtonLabel = useStore((s) => s.updateButtonLabel)
   const toggleHiddenPupitre = useStore((s) => s.toggleHiddenPupitre)
@@ -477,6 +479,8 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
       name: editName.trim() || song.name,
       bpm: editBpm ? Number(editBpm) : null,
       attackNotes,
+      cueText: editCueText,
+      cueTextSize: editCueSize,
     })
     setEditing(false)
   }
@@ -595,6 +599,28 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                   />
                 </div>
               ))}
+              {/* Texte de scène */}
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-gray-500 font-medium">📋 Texte de scène <span className="text-gray-400">(premiers mots des couplets…)</span></p>
+                  <div className="flex gap-1">
+                    {['sm', 'base', 'lg', 'xl', '2xl'].map((s) => (
+                      <button key={s} onClick={() => setEditCueSize(s)}
+                        className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${editCueSize === s ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-500 dark:border-gray-600'}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea
+                  value={editCueText}
+                  onChange={(e) => setEditCueText(e.target.value)}
+                  placeholder={"1er couplet : Au large de la mer...\n2e couplet : Le vent se lève..."}
+                  rows={5}
+                  className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none resize-y"
+                />
+              </div>
+
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave}
                   className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">

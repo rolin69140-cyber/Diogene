@@ -440,6 +440,16 @@ export default function Repetition() {
         )}
       </div>
 
+      {/* ── Texte de scène ── */}
+      {activeSong?.cueText && (
+        <div className="mx-4 mb-2 rounded-xl bg-white/80 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="max-h-40 overflow-y-auto px-3 py-2 whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200"
+            style={{ fontSize: activeSong.cueTextSize === 'sm' ? '12px' : activeSong.cueTextSize === 'lg' ? '18px' : activeSong.cueTextSize === 'xl' ? '22px' : activeSong.cueTextSize === '2xl' ? '26px' : '15px' }}>
+            {activeSong.cueText}
+          </div>
+        </div>
+      )}
+
       {/* Liste des chants */}
       <div className="flex-1 overflow-y-auto px-4 pt-3">
         {/* Sélecteur de set */}
