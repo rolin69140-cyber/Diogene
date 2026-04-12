@@ -955,18 +955,35 @@ function NotesAttaqueTab() {
   const songs = useStore((s) => s.songs)
   const updateSong = useStore((s) => s.updateSong)
 
-  const [grid, setGrid] = useState(() => {
+  // Colonnes = B, A, S, T + voix 5 si présente dans au moins un chant
+  const has5thVoice = songs.some((s) => s.buttonLabels?.['5'])
+  const allCols = [...PUPITRES, ...(has5thVoice ? ['5'] : [])]
+
+  // Pour chaque chant, les colonnes spécifiques (pupitres + 5e voix si le chant l'a)
+  const songCols = (song) => [
+    ...PUPITRES,
+    ...(song.buttonLabels?.['5'] ? ['5'] : []),
+  ]
+
+  const colLabel = (song, p) => {
+    if (p === '5') return song.buttonLabels?.['5'] || '5e voix'
+    return song.buttonLabels?.[p] || PUPITRE_LABELS[p]
+  }
+  const colColor = (p) => PUPITRE_COLORS[p] || '#7C3AED'
+
+  const initGrid = (songList) => {
     const init = {}
-    for (const song of songs) {
+    for (const song of songList) {
       init[song.id] = {}
-      for (const p of PUPITRES) {
+      for (const p of songCols(song)) {
         const notes = song.attackNotes?.[p] || []
         init[song.id][p] = [notes[0] || '', notes[1] || '']
       }
     }
     return init
-  })
+  }
 
+  const [grid, setGrid] = useState(() => initGrid(songs))
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -975,7 +992,7 @@ function NotesAttaqueTab() {
       for (const song of songs) {
         if (!next[song.id]) {
           next[song.id] = {}
-          for (const p of PUPITRES) {
+          for (const p of songCols(song)) {
             const notes = song.attackNotes?.[p] || []
             next[song.id][p] = [notes[0] || '', notes[1] || '']
           }
@@ -990,7 +1007,7 @@ function NotesAttaqueTab() {
       ...prev,
       [songId]: {
         ...prev[songId],
-        [pupitre]: prev[songId][pupitre].map((v, i) => i === idx ? value : v),
+        [pupitre]: (prev[songId][pupitre] || ['', '']).map((v, i) => i === idx ? value : v),
       },
     }))
     setSaved(false)
@@ -999,7 +1016,7 @@ function NotesAttaqueTab() {
   const handleSaveAll = () => {
     for (const song of songs) {
       const attackNotes = {}
-      for (const p of PUPITRES) {
+      for (const p of songCols(song)) {
         const notes = (grid[song.id]?.[p] || []).filter((n) => n.trim())
         if (notes.length) attackNotes[p] = notes
       }
@@ -1023,17 +1040,18 @@ function NotesAttaqueTab() {
     <div className="p-3">
       <p className="text-xs text-gray-500 mb-3">
         Saisissez les notes d'attaque pour tous les chants en une seule fois.<br />
-        Format : <span className="font-mono">Do4</span>, <span className="font-mono">Mi4</span>, <span className="font-mono">Sol4</span>…
+        Format : <span className="font-mono">Do4</span>, <span className="font-mono">Mi4</span>…
+        Une note suffit si tous les pupitres chantent pareil.
       </p>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="text-left py-2 pr-3 font-medium text-gray-600 dark:text-gray-400 min-w-[120px]">Chant</th>
-              {PUPITRES.map((p) => (
-                <th key={p} className="py-2 px-1 font-bold text-center w-28" style={{ color: PUPITRE_COLORS[p] }}>
-                  {PUPITRE_LABELS[p]}
+            <tr className="border-b-2 border-gray-200 dark:border-gray-700">
+              <th className="text-left py-2 pr-2 font-medium text-gray-500 dark:text-gray-400 min-w-[110px] text-xs">Chant</th>
+              {allCols.map((p) => (
+                <th key={p} className="py-2 px-1 font-bold text-center text-xs w-24" style={{ color: colColor(p) }}>
+                  {p === '5' ? '5e voix' : PUPITRE_LABELS[p]}
                 </th>
               ))}
             </tr>
@@ -1041,25 +1059,35 @@ function NotesAttaqueTab() {
           <tbody>
             {sorted.map((song) => (
               <tr key={song.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="py-2 pr-3 font-medium text-xs truncate max-w-[130px]">{song.name}</td>
-                {PUPITRES.map((p) => (
-                  <td key={p} className="py-1 px-1">
-                    <div className="flex flex-col gap-0.5">
-                      <input
-                        value={grid[song.id]?.[p]?.[0] || ''}
-                        onChange={(e) => handleChange(song.id, p, 0, e.target.value)}
-                        placeholder="Note 1"
-                        className="w-full border rounded px-1.5 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
-                      />
-                      <input
-                        value={grid[song.id]?.[p]?.[1] || ''}
-                        onChange={(e) => handleChange(song.id, p, 1, e.target.value)}
-                        placeholder="Note 2"
-                        className="w-full border rounded px-1.5 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
-                      />
-                    </div>
-                  </td>
-                ))}
+                <td className="py-2 pr-2 font-medium text-xs max-w-[110px]">
+                  <span className="block truncate" title={song.name}>{song.name}</span>
+                  {song.bpm && <span className="text-gray-400">{song.bpm} BPM</span>}
+                </td>
+                {allCols.map((p) => {
+                  const hasPupitre = songCols(song).includes(p)
+                  return (
+                    <td key={p} className="py-1 px-1">
+                      {hasPupitre ? (
+                        <div className="flex flex-col gap-0.5">
+                          <input
+                            value={grid[song.id]?.[p]?.[0] || ''}
+                            onChange={(e) => handleChange(song.id, p, 0, e.target.value)}
+                            placeholder="Note 1"
+                            className="w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                          />
+                          <input
+                            value={grid[song.id]?.[p]?.[1] || ''}
+                            onChange={(e) => handleChange(song.id, p, 1, e.target.value)}
+                            placeholder="Note 2"
+                            className="w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-center text-gray-200 dark:text-gray-700 text-lg">—</div>
+                      )}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>
@@ -1072,7 +1100,7 @@ function NotesAttaqueTab() {
           className={`w-full py-3 rounded-xl font-semibold text-sm transition-colors
             ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white active:bg-blue-700'}`}
         >
-          {saved ? '✓ Enregistré !' : '💾 Enregistrer toutes les notes'}
+          {saved ? '✓ Enregistré et synchronisé !' : '💾 Enregistrer toutes les notes'}
         </button>
       </div>
     </div>
