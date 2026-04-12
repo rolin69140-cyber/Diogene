@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/index'
 import useLibrary from '../hooks/useLibrary'
+import { saveBgImage, deleteBgImage, loadBgImage } from '../lib/bgImageStore'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe', 'cuivres']
 const THEMES = [{ v: 'auto', l: 'Auto' }, { v: 'clair', l: 'Clair' }, { v: 'sombre', l: 'Sombre' }]
@@ -14,6 +15,30 @@ export default function Parametres() {
 
   const [saved, setSaved] = useState(false)
   const timerRef = useRef(null)
+
+  // ── Fonds personnalisés ─────────────────────────────────────────────────
+  const [bgVersion, setBgVersion] = useState(0)
+  const [bgPreviews, setBgPreviews] = useState({ bg_concert: null, bg_repetition: null, bg_librairie: null })
+
+  useEffect(() => {
+    const keys = ['bg_concert', 'bg_repetition', 'bg_librairie']
+    keys.forEach(async (key) => {
+      const url = await loadBgImage(key)
+      if (url) setBgPreviews((prev) => ({ ...prev, [key]: url }))
+    })
+  }, [bgVersion])
+
+  const handleBgChange = async (key, file) => {
+    if (!file) return
+    await saveBgImage(key, file)
+    setBgVersion((v) => v + 1)
+  }
+
+  const handleBgDelete = async (key) => {
+    await deleteBgImage(key)
+    setBgPreviews((prev) => ({ ...prev, [key]: null }))
+    setBgVersion((v) => v + 1)
+  }
 
   // ── État section PIN directeur ──────────────────────────────────────────
   const [pinSection, setPinSection]   = useState('idle') // 'idle' | 'set' | 'change' | 'delete'
@@ -217,6 +242,36 @@ export default function Parametres() {
               </span>
             </div>
           </Row>
+        </div>
+      </section>
+
+      {/* Fonds personnalisés */}
+      <section className="mb-6">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Fonds de page personnalisés</h2>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+          {[
+            { key: 'bg_concert',    label: '🎤 Concert' },
+            { key: 'bg_repetition', label: '🎵 Répétition' },
+            { key: 'bg_librairie',  label: '📚 Librairie' },
+          ].map(({ key, label }) => (
+            <div key={key} className="flex items-center gap-3 px-4 py-3">
+              <span className="text-sm flex-1 font-medium">{label}</span>
+              {bgPreviews[key] && (
+                <img src={bgPreviews[key]} alt="" className="w-12 h-8 object-cover rounded opacity-80" />
+              )}
+              <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                {bgPreviews[key] ? 'Changer' : 'Choisir'}
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => handleBgChange(key, e.target.files[0])} />
+              </label>
+              {bgPreviews[key] && (
+                <button onClick={() => handleBgDelete(key)}
+                  className="text-red-400 text-xs px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 

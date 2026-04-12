@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, useRef } from 'react'
 import useStore from '../store/index'
+import useBgImage from '../hooks/useBgImage'
 import useLibrary from '../hooks/useLibrary'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -241,6 +242,7 @@ export default function Repetition() {
   const [notesSongId, setNotesSongId]         = useState(null) // modal prise de notes
   const [directorSongId, setDirectorSongId]   = useState(null) // modal chef de chœur
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
+  const customBg = useBgImage('bg_repetition')
 
   const speakHint = (text) => {
     if (!text || !window.speechSynthesis) return
@@ -303,7 +305,7 @@ export default function Repetition() {
       {/* Fond tableau Diogène */}
       <div
         className="fixed inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: 'url(/Diogene.jpg)', opacity: settings.bgOpacity ?? 0.12, zIndex: 0 }}
+        style={{ backgroundImage: `url(${customBg || '/Diogene.jpg'})`, opacity: settings.bgOpacity ?? 0.12, zIndex: 0 }}
       />
 
       {/* Contenu au-dessus du fond */}

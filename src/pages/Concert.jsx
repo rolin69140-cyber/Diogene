@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, useRef } from 'react'
 import useStore from '../store/index'
+import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
 
@@ -200,6 +201,7 @@ export default function Concert() {
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
+  const customBg = useBgImage('bg_concert')
 
   const speakHint = (text) => {
     if (!text || !window.speechSynthesis) return
@@ -264,10 +266,10 @@ export default function Concert() {
   return (
     <div className={`relative flex flex-col min-h-full ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
 
-      {/* Fond scène de théâtre */}
+      {/* Fond décoratif (perso prioritaire sur défaut) */}
       <div
         className="fixed inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: 'url(/Scene.jpg)', opacity: settings.bgOpacity ?? 0.12, zIndex: 0 }}
+        style={{ backgroundImage: `url(${customBg || '/Scene.jpg'})`, opacity: settings.bgOpacity ?? 0.12, zIndex: 0 }}
       />
 
       {/* Contenu au-dessus du fond */}

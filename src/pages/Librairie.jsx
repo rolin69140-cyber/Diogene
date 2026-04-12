@@ -2,13 +2,21 @@ import { useState, useEffect, useRef } from 'react'
 import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/index'
 import useImportAudio, { PDF_LABELS, PDF_MAX } from '../hooks/useImportAudio'
 import useLibrary from '../hooks/useLibrary'
+import useBgImage from '../hooks/useBgImage'
 
 const TABS = ['Chants', 'Sets', 'Notes d\'attaque']
 
 export default function Librairie() {
   const [tab, setTab] = useState('Chants')
+  const customBg = useBgImage('bg_librairie')
+  const bgOpacity = useStore((s) => s.settings.bgOpacity) ?? 0.12
+
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="relative flex flex-col min-h-full">
+      {customBg && (
+        <div className="fixed inset-0 bg-cover bg-center pointer-events-none"
+          style={{ backgroundImage: `url(${customBg})`, opacity: bgOpacity, zIndex: 0 }} />
+      )}
       <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 sticky top-0 z-10">
         {TABS.map((t) => (
           <button
