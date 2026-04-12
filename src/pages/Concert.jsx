@@ -281,13 +281,13 @@ export default function Concert() {
             const hasLyrics = !!(currentSong?.lyricsText || songPdfs.length > 0)
 
             const btnLabel = isMine ? 'Ma voix' : (customLabel || p)
-            const btnFontSize = btnLabel.length > 6 ? Math.min(10, baseFontSize) : btnLabel.length > 4 ? Math.min(13, baseFontSize) : btnLabel.length > 2 ? Math.min(16, baseFontSize) : baseFontSize
+            const btnFontSize = btnLabel.length > 6 ? Math.min(13, baseFontSize) : btnLabel.length > 4 ? Math.min(16, baseFontSize) : btnLabel.length > 2 ? Math.min(18, baseFontSize) : baseFontSize
 
             return (
               <div key={p} className="relative flex flex-col items-center gap-1">
                 <button
                   style={{ backgroundColor: color, fontSize: btnFontSize, lineHeight: 1.2 }}
-                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative overflow-hidden`}
+                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
