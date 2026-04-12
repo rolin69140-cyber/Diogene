@@ -34,7 +34,13 @@ function detectPdfLabel(filename) {
  *   "Gloria Paroles.pdf"            → { songName: "Gloria",    label: "Paroles" }
  */
 function detectPdfSongAndLabel(filename) {
-  const base = filename.replace(/\.pdf$/i, '').replace(/_/g, ' ').normalize('NFC')
+  // Underscores → espaces, apostrophes encodées → apostrophe normale
+  const base = filename
+    .replace(/\.pdf$/i, '')
+    .replace(/_/g, ' ')
+    .replace(/&#39;|&apos;/g, "'")
+    .normalize('NFC')
+    .trim()
 
   for (const { pattern, label } of PDF_LABEL_PATTERNS) {
     // Format "NomDuChant - Label"
@@ -177,12 +183,21 @@ export default function useImportAudio() {
     setPendingPdfs([])
 
     for (const pdf of currentPdfs) {
-      const key = pdf.songName.toLowerCase()
-      // Chercher d'abord dans les chants du lot, puis dans la bibliothèque existante
+      // Normalisation pour comparaison : minuscules, sans apostrophes/tirets/underscores/accents
+      const normalize = (str) => str
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // supprimer accents
+        .replace(/['\u2019_\-]/g, '')                      // supprimer apostrophes, tirets, underscores
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      const pdfKey = normalize(pdf.songName)
       const allSongs = useStore.getState().songs
-      const matchedSong = allSongs.find((s) => s.name.normalize('NFC').toLowerCase() === key)
-        || allSongs.find((s) => s.name.normalize('NFC').toLowerCase().includes(key) && key.length > 3)
-        || allSongs.find((s) => key.includes(s.name.normalize('NFC').toLowerCase()) && s.name.length > 3)
+
+      const matchedSong =
+        allSongs.find((s) => normalize(s.name) === pdfKey) ||
+        allSongs.find((s) => normalize(s.name).includes(pdfKey) && pdfKey.length > 4) ||
+        allSongs.find((s) => pdfKey.includes(normalize(s.name)) && s.name.length > 4)
 
       if (matchedSong) {
         const existingPdfs = matchedSong.pdfFiles || []
