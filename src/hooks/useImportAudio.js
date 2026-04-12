@@ -123,11 +123,74 @@ export default function useImportAudio() {
       await new Promise(r => setTimeout(r, 0))
     }
 
-    setProposals(audioResults)
-    setPendingPdfs(pdfResults)
     setImporting(false)
     setImportProgress('')
+
+    if (audioResults.length === 0 && pdfResults.length > 0) {
+      // Que des PDFs — on les traite directement sans passer par la confirmation
+      setPendingPdfs([])
+      processPdfs(pdfResults)
+      return []
+    }
+
+    setProposals(audioResults)
+    setPendingPdfs(pdfResults)
     return audioResults
+  }, [])
+
+  // Traitement direct des PDFs (quand déposés sans MP3)
+  const processPdfs = useCallback(async (pdfList) => {
+    const allSongs = useStore.getState().songs
+    const normalize = (str) => str
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/['\u2019_\-]/g, '')
+      .replace(/\s+/g, ' ').trim()
+
+    setUploading(true)
+    setUploadProgress({ done: 0, total: pdfList.length })
+
+    for (let i = 0; i < pdfList.length; i++) {
+      const pdf = pdfList[i]
+      setUploadProgress({ done: i, total: pdfList.length })
+      const pdfKey = normalize(pdf.songName)
+      const matched =
+        allSongs.find((s) => normalize(s.name) === pdfKey) ||
+        allSongs.find((s) => normalize(s.name).includes(pdfKey) && pdfKey.length > 4) ||
+        allSongs.find((s) => pdfKey.includes(normalize(s.name)) && s.name.length > 4)
+
+      if (!matched) { console.warn('[PDF] aucun chant trouvé pour :', pdf.fileName); continue }
+
+      const existingPdfs = matched.pdfFiles || []
+      if (existingPdfs.length >= PDF_MAX) continue
+
+      let label = pdf.label
+      const existingLabels = existingPdfs.map((p) => p.label)
+      if (existingLabels.includes(label)) {
+        const existing = existingPdfs.find((p) => p.label === label)
+        if (existing) useStore.getState().renamePdfInSong(matched.id, existing.id, `${label} 1`)
+        label = `${label} 2`
+      }
+
+      const pdfEntry = { id: crypto.randomUUID(), fileId: pdf.fileId, name: pdf.fileName, label, storageUrl: null }
+      useStore.getState().addPdfToSong(matched.id, pdfEntry)
+
+      try {
+        const arrayBuffer = await readFileAsArrayBuffer(pdf.file)
+        await savePdfFile(pdf.fileId, arrayBuffer, pdf.fileName)
+        const storageUrl = await uploadPdfFile(pdf.fileId, arrayBuffer)
+        if (storageUrl) {
+          const song = useStore.getState().songs.find((s) => s.id === matched.id)
+          if (song) {
+            const updatedPdfs = (song.pdfFiles || []).map((p) => p.fileId === pdf.fileId ? { ...p, storageUrl } : p)
+            useStore.getState().updateSong(matched.id, { pdfFiles: updatedPdfs })
+          }
+        }
+      } catch (e) { console.warn('[PDF] upload failed:', pdf.fileName, e) }
+    }
+
+    setUploadProgress({ done: pdfList.length, total: pdfList.length })
+    setTimeout(() => { setUploading(false); setUploadProgress({ done: 0, total: 0 }) }, 3000)
   }, [])
 
   // Confirme et intègre les propositions dans la bibliothèque
@@ -216,8 +279,8 @@ export default function useImportAudio() {
             label,
             storageUrl: null, // sera mis à jour lors de l'upload
           })
-          // Ajouter aux uploads
-          toUpload.push({ item: { fileId: pdf.fileId, mimeType: 'application/pdf' }, songId: matchedSong.id, isPdf: true })
+          // Ajouter aux uploads (avec le File object pour lire les données)
+          toUpload.push({ item: { fileId: pdf.fileId, mimeType: 'application/pdf', file: pdf.file }, songId: matchedSong.id, isPdf: true })
         }
       }
       // Si aucun chant trouvé, le PDF est ignoré silencieusement
