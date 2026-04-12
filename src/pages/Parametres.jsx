@@ -204,6 +204,19 @@ export default function Parametres() {
           <Row label="Mode scène">
             <Toggle value={settings.modeScene} onChange={(v) => save({ modeScene: v })} />
           </Row>
+          <Row label="Fond décoratif">
+            <div className="flex items-center gap-2">
+              <input
+                type="range" min="0" max="0.4" step="0.01"
+                value={settings.bgOpacity ?? 0.12}
+                onChange={(e) => save({ bgOpacity: Number(e.target.value) })}
+                className="w-28 accent-blue-500"
+              />
+              <span className="text-xs text-gray-400 w-8">
+                {Math.round((settings.bgOpacity ?? 0.12) * 100)}%
+              </span>
+            </div>
+          </Row>
         </div>
       </section>
 

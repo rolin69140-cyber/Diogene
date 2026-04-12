@@ -477,6 +477,7 @@ const useStore = create(
         theme: 'auto',               // clair | sombre | auto
         buttonSize: 'normal',        // normal | grand | tres-grand
         modeScene: false,
+        bgOpacity: 0.12,             // opacité du fond décoratif (0 = aucun, 1 = plein)
         directorPin: '',             // PIN chef de chœur (vide = non protégé)
       },
 

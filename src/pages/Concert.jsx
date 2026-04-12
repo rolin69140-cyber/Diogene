@@ -258,7 +258,7 @@ export default function Concert() {
       {/* Fond scène de théâtre */}
       <div
         className="fixed inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: 'url(/Scene.jpg)', opacity: 0.12, zIndex: 0 }}
+        style={{ backgroundImage: 'url(/Scene.jpg)', opacity: settings.bgOpacity ?? 0.12, zIndex: 0 }}
       />
 
       {/* Contenu au-dessus du fond */}
