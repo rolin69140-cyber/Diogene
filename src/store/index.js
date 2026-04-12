@@ -15,8 +15,12 @@ function toCloud(song) {
 const DB_NAME = 'diogene'
 const DB_VERSION = 1
 
+// Connexion unique réutilisée (évite d'ouvrir/fermer pour chaque fichier)
+let _dbPromise = null
+
 function openDB() {
-  return new Promise((resolve, reject) => {
+  if (_dbPromise) return _dbPromise
+  _dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (e) => {
       const db = e.target.result
@@ -28,8 +32,9 @@ function openDB() {
       }
     }
     req.onsuccess = (e) => resolve(e.target.result)
-    req.onerror = (e) => reject(e.target.error)
+    req.onerror = (e) => { _dbPromise = null; reject(e.target.error) }
   })
+  return _dbPromise
 }
 
 export async function saveAudioFile(id, arrayBuffer, name, type) {
