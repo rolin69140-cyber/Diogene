@@ -321,8 +321,8 @@ export default function Repetition() {
               <div key={p} className="relative flex flex-col items-center gap-1">
                 {/* Bouton principal — tap = note courte, maintenir = note tenue */}
                 <button
-                  style={{ backgroundColor: color }}
-                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
+                  style={{ backgroundColor: color, ...(displayLabel.length > 2 ? { fontSize: displayLabel.length > 6 ? '10px' : displayLabel.length > 4 ? '12px' : '14px', lineHeight: 1.2 } : {}) }}
+                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative overflow-hidden`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)

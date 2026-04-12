@@ -21,61 +21,87 @@ const NOTE_FR_MAP = {
 function noteToFreq(noteStr, transposition = 0) {
   if (!noteStr) return null
   const s = noteStr.trim().toLowerCase()
-  const match = s.match(/^([a-zÀ-ÿ#b]+)(\d+)$/)
+  // Formats supportés : "F#4", "F4#", "Fb4", "F4b", "fa#4", "fa4#", "sol4", etc.
+  const match = s.match(/^([a-zÀ-ÿ]+)([#b]?)(\d+)([#b]?)$/)
   if (!match) return null
-  const [, name, octStr] = match
+  const [, name, alt1, octStr, alt2] = match
+  const alt = alt1 || alt2   // altération avant ou après le chiffre d'octave
   const oct = parseInt(octStr)
   const letter = NOTE_FR_MAP[name] || name.toUpperCase()
   const base = NOTE_FREQ[letter]
   if (!base) return null
-  // Calcul fréquence : base * 2^(oct-4) * 2^(transposition/12)
-  const freq = base * Math.pow(2, oct - 4) * Math.pow(2, transposition / 12)
+  // alt '#' = +1 demi-ton, 'b' = -1 demi-ton
+  const semitoneMod = alt === '#' ? 1 : alt === 'b' ? -1 : 0
+  // Calcul fréquence : base * 2^(oct-4) * 2^((transposition+altération)/12)
+  const freq = base * Math.pow(2, oct - 4) * Math.pow(2, (transposition + semitoneMod) / 12)
   return freq
 }
 
-function playFreq(audioCtx, freq, volume = 0.8, duration = 1.2) {
-  const osc = audioCtx.createOscillator()
+function playFreq(audioCtx, compressor, freq, volume = 0.8, duration = 1.5) {
+  // Oscillateur principal (onde sinusoïdale = son pur, pas de distorsion)
+  const osc  = audioCtx.createOscillator()
   const gain = audioCtx.createGain()
 
-  osc.type = 'triangle'
+  osc.type = 'sine'
   osc.frequency.value = freq
+
+  // Pour les notes graves (ténors < 200 Hz), ajouter une légère harmonique
+  if (freq < 200) {
+    const osc2  = audioCtx.createOscillator()
+    const gain2 = audioCtx.createGain()
+    osc2.type = 'sine'
+    osc2.frequency.value = freq * 2   // octave au-dessus pour la clarté
+    gain2.gain.value = 0.25
+    osc2.connect(gain2)
+    gain2.connect(gain)
+    osc2.start(audioCtx.currentTime)
+    osc2.stop(audioCtx.currentTime + duration)
+  }
 
   const now = audioCtx.currentTime
   gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(volume * 0.6, now + 0.02)
-  gain.gain.exponentialRampToValueAtTime(volume * 0.15, now + 0.3)
+  gain.gain.linearRampToValueAtTime(volume * 0.5, now + 0.015)  // attaque rapide
+  gain.gain.exponentialRampToValueAtTime(volume * 0.2, now + 0.4)
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
 
   osc.connect(gain)
-  gain.connect(audioCtx.destination)
+  gain.connect(compressor)
   osc.start(now)
   osc.stop(now + duration)
 }
 
-// Contexte audio partagé (créé au 1er tap utilisateur)
+// Contexte audio partagé + compresseur maître (évite le clipping)
 let sharedCtx = null
+let sharedCompressor = null
 function getCtx() {
   if (!sharedCtx || sharedCtx.state === 'closed') {
     sharedCtx = new AudioContext()
+    sharedCompressor = sharedCtx.createDynamicsCompressor()
+    sharedCompressor.threshold.value = -18
+    sharedCompressor.knee.value      = 10
+    sharedCompressor.ratio.value     = 4
+    sharedCompressor.attack.value    = 0.003
+    sharedCompressor.release.value   = 0.15
+    sharedCompressor.connect(sharedCtx.destination)
   }
   if (sharedCtx.state === 'suspended') {
     sharedCtx.resume()
   }
-  return sharedCtx
+  return { ctx: sharedCtx, compressor: sharedCompressor }
 }
 
 export default function usePianoSynth() {
   const playNotes = useCallback(async (notes, instrument = 'piano', transposition = 0, volume = 0.8) => {
-    const ctx = getCtx()
+    const { ctx, compressor } = getCtx()
     const freqs = notes
       .map((n) => noteToFreq(String(n), transposition))
       .filter(Boolean)
     if (freqs.length === 0) return
-    freqs.forEach((f) => playFreq(ctx, f, volume))
+    freqs.forEach((f) => playFreq(ctx, compressor, f, volume))
   }, [])
 
   const playPupitre = useCallback(async (pupitre, attackNotes, instrument = 'piano', transposition = 0, volume = 0.8) => {
-    const ctx = getCtx()
+    const { ctx, compressor } = getCtx()
 
     if (attackNotes && attackNotes.length > 0) {
       // Notes configurées
@@ -83,7 +109,7 @@ export default function usePianoSynth() {
         .map((n) => noteToFreq(String(n), transposition))
         .filter(Boolean)
       if (freqs.length > 0) {
-        freqs.forEach((f) => playFreq(ctx, f, volume))
+        freqs.forEach((f) => playFreq(ctx, compressor, f, volume))
         return
       }
     }
@@ -92,7 +118,7 @@ export default function usePianoSynth() {
     if (pupitre && DEFAULT_NOTES[pupitre]) {
       DEFAULT_NOTES[pupitre].forEach((f) => {
         const adjusted = f * Math.pow(2, transposition / 12)
-        playFreq(ctx, adjusted, volume)
+        playFreq(ctx, compressor, adjusted, volume)
       })
     }
   }, [])

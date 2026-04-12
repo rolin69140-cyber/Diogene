@@ -279,11 +279,14 @@ export default function Concert() {
               : (currentSong?.lyricsFileId ? [{ id: currentSong.lyricsFileId, label: 'Paroles' }] : [])
             const hasLyrics = !!(currentSong?.lyricsText || songPdfs.length > 0)
 
+            const btnLabel = isMine ? 'Ma voix' : (customLabel || p)
+            const btnFontSize = btnLabel.length > 6 ? '10px' : btnLabel.length > 4 ? '12px' : btnLabel.length > 2 ? '14px' : null
+
             return (
               <div key={p} className="relative flex flex-col items-center gap-1">
                 <button
-                  style={{ backgroundColor: color }}
-                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
+                  style={{ backgroundColor: color, ...(btnFontSize ? { fontSize: btnFontSize, lineHeight: 1.2 } : {}) }}
+                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative overflow-hidden`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
@@ -293,7 +296,7 @@ export default function Concert() {
                   onPointerUp={() => { holdStopRef.current?.(); holdStopRef.current = null }}
                   onPointerCancel={() => { holdStopRef.current?.(); holdStopRef.current = null }}
                 >
-                  {isMine ? 'Ma voix' : (customLabel || p)}
+                  {btnLabel}
                   {hasAudio && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white/60" />}
                 </button>
                 {currentSong && (hasAudio || hasLyrics) && (
