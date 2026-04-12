@@ -82,7 +82,9 @@ export default function useImportAudio() {
       reader.readAsArrayBuffer(file)
     })
 
-  // Import d'un lot mixte (audio + PDF) — analyse locale uniquement (rapide)
+  // Import d'un lot mixte (audio + PDF)
+  // Phase 1 : lecture rapide des noms uniquement (pas d'écriture IndexedDB)
+  // Phase 2 : sauvegarde IndexedDB + upload Firebase après confirmation
   const analyzeFiles = useCallback(async (files) => {
     setImporting(true)
     const audioResults = []
@@ -92,20 +94,14 @@ export default function useImportAudio() {
 
     for (let i = 0; i < total; i++) {
       const file = allFiles[i]
-      setImportProgress(`Lecture ${i + 1} / ${total} : ${file.name}`)
+      setImportProgress(`Analyse ${i + 1} / ${total} : ${file.name}`)
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-
       const fileId = crypto.randomUUID()
-      const arrayBuffer = await readFileAsArrayBuffer(file)
 
       if (isPdf) {
-        // Sauvegarde locale PDF
-        await savePdfFile(fileId, arrayBuffer, file.name)
         const { songName, label } = detectPdfSongAndLabel(file.name)
-        pdfResults.push({ fileId, fileName: file.name, songName, label })
+        pdfResults.push({ fileId, fileName: file.name, songName, label, file })
       } else {
-        // Sauvegarde locale audio
-        await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
         const detected = detectAudioPrefix(file.name)
         const songName = detected
           ? detected.songName
@@ -117,11 +113,14 @@ export default function useImportAudio() {
           pupitres: detected?.pupitres || [],
           fileId,
           mimeType: file.type || 'audio/mpeg',
+          file, // on garde le File object pour la sauvegarde post-confirmation
           storageUrl: null,
           confirmed: songName !== '',
           needsSongName: songName === '',
         })
       }
+      // Petit délai pour laisser l'UI respirer
+      await new Promise(r => setTimeout(r, 0))
     }
 
     setProposals(audioResults)
@@ -170,9 +169,8 @@ export default function useImportAudio() {
         for (const btn of newButtons) addAudioButton(song.id, btn)
       }
 
-      // Préparer les uploads
       for (let i = 0; i < items.length; i++) {
-        toUpload.push({ item: items[i], songId, btnId: newButtons[i].id })
+        toUpload.push({ item: items[i], songId, btnId: newButtons[i].id, isPdf: false })
       }
     }
 
@@ -226,22 +224,22 @@ export default function useImportAudio() {
       // (cas rare : PDF dont le nom ne correspond à aucun chant importé)
     }
 
-    // --- Phase 2 : upload Firebase séquentiel en arrière-plan ---
+    // --- Phase 2 : sauvegarde IndexedDB + upload Firebase en arrière-plan ---
     ;(async () => {
       setUploading(true)
       setUploadProgress({ done: 0, total: toUpload.length })
 
       for (let i = 0; i < toUpload.length; i++) {
-        const { item, songId, isPdf } = toUpload[i]
+        const { item, songId, btnId, isPdf } = toUpload[i]
         setUploadProgress({ done: i, total: toUpload.length })
         try {
-          const { getAudioFile, getPdfFile } = await import('../store/index')
+          const file = item.file
+          if (!file) continue
+          const arrayBuffer = await readFileAsArrayBuffer(file)
 
           if (isPdf) {
-            const record = await getPdfFile(item.fileId)
-            if (!record) continue
-            const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-            const storageUrl = await uploadPdfFile(item.fileId, data)
+            await savePdfFile(item.fileId, arrayBuffer, file.name)
+            const storageUrl = await uploadPdfFile(item.fileId, arrayBuffer)
             if (storageUrl) {
               const currentSong = useStore.getState().songs.find((s) => s.id === songId)
               if (currentSong) {
@@ -252,15 +250,13 @@ export default function useImportAudio() {
               }
             }
           } else {
-            const record = await getAudioFile(item.fileId)
-            if (!record) continue
-            const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-            const storageUrl = await uploadAudioFile(item.fileId, data, item.mimeType)
+            await saveAudioFile(item.fileId, arrayBuffer, file.name, file.type)
+            const storageUrl = await uploadAudioFile(item.fileId, arrayBuffer, item.mimeType)
             if (storageUrl) {
               const currentSong = useStore.getState().songs.find((s) => s.id === songId)
               if (currentSong) {
                 const updatedButtons = (currentSong.audioButtons || []).map((b) =>
-                  b.id === toUpload[i].btnId ? { ...b, storageUrl } : b
+                  b.id === btnId ? { ...b, storageUrl } : b
                 )
                 useStore.getState().updateSong(songId, { audioButtons: updatedButtons })
               }
