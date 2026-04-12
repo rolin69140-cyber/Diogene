@@ -1,5 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import {
+  saveSong  as fbSaveSong,
+  deleteSong as fbDeleteSong,
+} from '../lib/firebaseSync'
+
+/** Prépare un chant pour Firestore : on retire les notes personnelles */
+function toCloud(song) {
+  const { notes, ...rest } = song  // 'notes' = notes perso (locales uniquement)
+  return rest
+}
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 const DB_NAME = 'diogene'
@@ -259,27 +269,55 @@ const useStore = create(
       canUndo: () => get()._undoStack.length > 0,
       undoLabel: () => get()._undoStack[0]?.label || '',
 
+      // ── Sync Firebase ──────────────────────────────────────────────────────
+      syncReady: false,
+      setSyncReady: (v) => set({ syncReady: v }),
+      // Fusionne les chants du cloud en préservant les notes personnelles locales
+      setSongsFromCloud: (cloudSongs) => set((s) => {
+        const localNotesMap = {}
+        for (const song of s.songs) {
+          if (song.notes) localNotesMap[song.id] = song.notes
+        }
+        const merged = cloudSongs.map((song) => ({
+          ...song,
+          ...(localNotesMap[song.id] ? { notes: localNotesMap[song.id] } : {}),
+        }))
+        return { songs: merged }
+      }),
+      setSetsFromCloud: (sets) => set({ sets }),
+
       // ── Bibliothèque de chants ──────────────────────────────────────────────
-      songs: [], // [{ id, name, bpm, attackNotes: {B,A,S,T}, audioButtons: [{id,label,pupitres,fileId,fileName}], lyricsFileId, lyricsText, lyricsType }]
+      songs: [],
 
-      addSong: (song) => set((s) => ({
-        songs: [...s.songs, { ...song, id: song.id || crypto.randomUUID() }]
-      })),
+      addSong: (song) => {
+        const newSong = { ...song, id: song.id || crypto.randomUUID() }
+        set((s) => ({ songs: [...s.songs, newSong] }))
+        fbSaveSong(toCloud(newSong)).catch((e) => console.warn('[Firebase] addSong sync:', e))
+      },
 
-      updateSong: (id, updates) => set((s) => ({
-        songs: s.songs.map((song) => song.id === id ? { ...song, ...updates } : song)
-      })),
+      updateSong: (id, updates) => set((s) => {
+        const newSongs = s.songs.map((song) => song.id === id ? { ...song, ...updates } : song)
+        const updated = newSongs.find((song) => song.id === id)
+        // Ne pas sync si on met à jour uniquement les notes perso
+        if (updated && !('notes' in updates && Object.keys(updates).length === 1)) {
+          fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] updateSong sync:', e))
+        }
+        return { songs: newSongs }
+      }),
 
-      updateButtonLabel: (songId, pupitre, label) => set((s) => ({
-        songs: s.songs.map((song) =>
+      updateButtonLabel: (songId, pupitre, label) => set((s) => {
+        const newSongs = s.songs.map((song) =>
           song.id === songId
             ? { ...song, buttonLabels: { ...(song.buttonLabels || {}), [pupitre]: label || undefined } }
             : song
         )
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] updateButtonLabel sync:', e))
+        return { songs: newSongs }
+      }),
 
-      toggleHiddenPupitre: (songId, pupitre) => set((s) => ({
-        songs: s.songs.map((song) => {
+      toggleHiddenPupitre: (songId, pupitre) => set((s) => {
+        const newSongs = s.songs.map((song) => {
           if (song.id !== songId) return song
           const hidden = song.hiddenPupitres || []
           return {
@@ -289,11 +327,16 @@ const useStore = create(
               : [...hidden, pupitre]
           }
         })
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] toggleHiddenPupitre sync:', e))
+        return { songs: newSongs }
+      }),
 
-      deleteSong: (id) => set((s) => ({
-        songs: s.songs.filter((song) => song.id !== id)
-      })),
+      deleteSong: (id) => {
+        set((s) => ({ songs: s.songs.filter((song) => song.id !== id) }))
+        // Note: fbDeleteSong est appelé dans useLibrary.deleteSongWithFiles
+        // On ne l'appelle pas ici pour éviter les doubles suppressions
+      },
 
       addAudioButton: (songId, button) => set((s) => ({
         songs: s.songs.map((song) =>
@@ -303,21 +346,27 @@ const useStore = create(
         )
       })),
 
-      removeAudioButton: (songId, buttonId) => set((s) => ({
-        songs: s.songs.map((song) =>
+      removeAudioButton: (songId, buttonId) => set((s) => {
+        const newSongs = s.songs.map((song) =>
           song.id === songId
             ? { ...song, audioButtons: (song.audioButtons || []).filter((b) => b.id !== buttonId) }
             : song
         )
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] removeAudioButton sync:', e))
+        return { songs: newSongs }
+      }),
 
-      renameAudioButton: (songId, buttonId, newLabel) => set((s) => ({
-        songs: s.songs.map((song) =>
+      renameAudioButton: (songId, buttonId, newLabel) => set((s) => {
+        const newSongs = s.songs.map((song) =>
           song.id === songId
             ? { ...song, audioButtons: (song.audioButtons || []).map((b) => b.id === buttonId ? { ...b, label: newLabel } : b) }
             : song
         )
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] renameAudioButton sync:', e))
+        return { songs: newSongs }
+      }),
 
       addPdfToSong: (songId, pdf) => set((s) => ({
         songs: s.songs.map((song) =>
@@ -327,21 +376,27 @@ const useStore = create(
         )
       })),
 
-      removePdfFromSong: (songId, pdfId) => set((s) => ({
-        songs: s.songs.map((song) =>
+      removePdfFromSong: (songId, pdfId) => set((s) => {
+        const newSongs = s.songs.map((song) =>
           song.id === songId
             ? { ...song, pdfFiles: (song.pdfFiles || []).filter((p) => p.id !== pdfId) }
             : song
         )
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] removePdfFromSong sync:', e))
+        return { songs: newSongs }
+      }),
 
-      renamePdfInSong: (songId, pdfId, newLabel) => set((s) => ({
-        songs: s.songs.map((song) =>
+      renamePdfInSong: (songId, pdfId, newLabel) => set((s) => {
+        const newSongs = s.songs.map((song) =>
           song.id === songId
             ? { ...song, pdfFiles: (song.pdfFiles || []).map((p) => p.id === pdfId ? { ...p, label: newLabel } : p) }
             : song
         )
-      })),
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] renamePdfInSong sync:', e))
+        return { songs: newSongs }
+      }),
 
       // ── Sets ───────────────────────────────────────────────────────────────
       // set: { id, name, date, type: 'repetition'|'concert', songIds: [], arrangements: {songId: string}, markers: {songId: [{id,time,note,pupitre}]}, annotations: {songId: [{id,start,end,color,comment}]}, archived: bool }

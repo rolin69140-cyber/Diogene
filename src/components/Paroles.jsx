@@ -74,19 +74,22 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
     }
   }, [])
 
-  // Charge le PDF sélectionné
+  // Charge le PDF sélectionné (IndexedDB local, fallback Firebase Storage)
   useEffect(() => {
     if (!selectedPdf) return
     const fileId = selectedPdf.fileId || selectedPdf.id
-    let url = null
+    let blobUrl = null
     getPdfFile(fileId).then((record) => {
       if (record) {
         const blob = new Blob([record.data], { type: 'application/pdf' })
-        url = URL.createObjectURL(blob)
-        setPdfUrl(url)
+        blobUrl = URL.createObjectURL(blob)
+        setPdfUrl(blobUrl)
+      } else if (selectedPdf.storageUrl) {
+        // Fallback : URL directe Firebase Storage
+        setPdfUrl(selectedPdf.storageUrl)
       }
     })
-    return () => { if (url) URL.revokeObjectURL(url) }
+    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }, [selectedPdfId])
 
   const handleSave = () => {

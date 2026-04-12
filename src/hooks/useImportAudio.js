@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react'
 import { saveAudioFile, savePdfFile, detectAudioPrefix } from '../store/index'
 import useStore from '../store/index'
+import {
+  uploadAudioFile,
+  uploadPdfFile,
+  saveSong as fbSaveSong,
+} from '../lib/firebaseSync'
 
 // Labels PDF reconnus (détection sur le nom de fichier)
 export const PDF_LABELS = ['Paroles', 'Partition', 'Accompagnement', 'Direction']
@@ -42,7 +47,17 @@ export default function useImportAudio() {
       const detected = detectAudioPrefix(file.name)
       const fileId = crypto.randomUUID()
       const arrayBuffer = await readFileAsArrayBuffer(file)
+
+      // Sauvegarde locale (IndexedDB)
       await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
+
+      // Upload vers Firebase Storage
+      let storageUrl = null
+      try {
+        storageUrl = await uploadAudioFile(fileId, arrayBuffer, file.type || 'audio/mpeg')
+      } catch (e) {
+        console.warn('[Firebase] uploadAudioFile failed:', e)
+      }
 
       const songName = detected
         ? detected.songName  // peut être '' si préfixe seul sans nom de chant
@@ -53,6 +68,7 @@ export default function useImportAudio() {
         button: detected?.button || 'Tutti',
         pupitres: detected?.pupitres || [],
         fileId,
+        storageUrl,
         confirmed: songName !== '', // non coché si nom de chant manquant
         needsSongName: songName === '', // flag pour signaler à l'UI
       })
@@ -64,7 +80,7 @@ export default function useImportAudio() {
   }, [])
 
   // Confirme et intègre les propositions dans la bibliothèque
-  const confirmImport = useCallback((confirmedProposals) => {
+  const confirmImport = useCallback(async (confirmedProposals) => {
     const byName = {}
     for (const p of confirmedProposals) {
       if (!p.confirmed) continue
@@ -76,19 +92,39 @@ export default function useImportAudio() {
 
     for (const [key, { name, items }] of Object.entries(byName)) {
       let song = songs.find((s) => s.name.normalize('NFC').toLowerCase() === key)
+
+      // Construire les boutons avec storageUrl inclus
+      const newButtons = items.map((item) => ({
+        id: crypto.randomUUID(),
+        label: item.button,
+        pupitres: item.pupitres,
+        fileId: item.fileId,
+        fileName: item.fileName,
+        storageUrl: item.storageUrl || null,
+      }))
+
       if (!song) {
         const newId = crypto.randomUUID()
+        const newSong = { id: newId, name, audioButtons: newButtons, attackNotes: {} }
         addSong({ id: newId, name, audioButtons: [], attackNotes: {} })
-        song = { id: newId, name, audioButtons: [], attackNotes: {} }
-      }
-
-      for (const item of items) {
-        addAudioButton(song.id, {
-          label: item.button,
-          pupitres: item.pupitres,
-          fileId: item.fileId,
-          fileName: item.fileName,
-        })
+        for (const btn of newButtons) addAudioButton(newId, btn)
+        // Sauvegarder dans Firestore
+        try {
+          await fbSaveSong(newSong)
+        } catch (e) {
+          console.warn('[Firebase] saveSong failed:', e)
+        }
+      } else {
+        for (const btn of newButtons) addAudioButton(song.id, btn)
+        // Sauvegarder la chanson complète dans Firestore
+        try {
+          await fbSaveSong({
+            ...song,
+            audioButtons: [...(song.audioButtons || []), ...newButtons],
+          })
+        } catch (e) {
+          console.warn('[Firebase] saveSong failed:', e)
+        }
       }
     }
     setProposals([])
@@ -117,8 +153,17 @@ export default function useImportAudio() {
         const arrayBuffer = await readFileAsArrayBuffer(file)
         const fileId = crypto.randomUUID()
         await savePdfFile(fileId, arrayBuffer, file.name)
+
+        // Upload vers Firebase Storage
+        let storageUrl = null
+        try {
+          storageUrl = await uploadPdfFile(fileId, arrayBuffer)
+        } catch (e) {
+          console.warn('[Firebase] uploadPdfFile failed:', e)
+        }
+
         const baseLabel = detectPdfLabel(file.name)
-        newItems.push({ fileId, name: file.name, baseLabel })
+        newItems.push({ fileId, name: file.name, baseLabel, storageUrl })
       } else {
         // Fichier texte
         const text = await file.text()
@@ -153,6 +198,7 @@ export default function useImportAudio() {
 
     // Assigner les labels finaux aux nouveaux fichiers
     const assignedInBatch = {}
+    const finalNewPdfs = []
     for (const item of newItems) {
       const base = item.baseLabel
       const existingCount = existingBaseCount[base] || 0
@@ -168,7 +214,35 @@ export default function useImportAudio() {
         item.label = `${base} ${startOffset + assignedInBatch[base] - 1}`
       }
 
-      addPdfToSong(songId, { fileId: item.fileId, name: item.name, label: item.label })
+      const pdfEntry = {
+        id: crypto.randomUUID(),
+        fileId: item.fileId,
+        name: item.name,
+        label: item.label,
+        storageUrl: item.storageUrl || null,
+      }
+      finalNewPdfs.push(pdfEntry)
+      addPdfToSong(songId, pdfEntry)
+    }
+
+    // Sauvegarder la chanson complète dans Firestore
+    if (currentSong) {
+      try {
+        // Reconstruire les PDFs existants avec les éventuels renommages
+        const renamedExisting = existingPdfs.map((pdf) => {
+          const base = pdf.label.replace(/\s+\d+$/, '')
+          const renamed = newBaseCount[base] && (existingBaseCount[base] || 0) === 1
+            ? { ...pdf, label: `${base} 1` }
+            : pdf
+          return renamed
+        })
+        await fbSaveSong({
+          ...currentSong,
+          pdfFiles: [...renamedExisting, ...finalNewPdfs],
+        })
+      } catch (e) {
+        console.warn('[Firebase] saveSong (lyrics) failed:', e)
+      }
     }
   }, [songs, updateSong, addPdfToSong, renamePdfInSong])
 

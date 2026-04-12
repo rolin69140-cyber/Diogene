@@ -48,10 +48,17 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
     if (!button?.fileId) return
     let cancelled = false
     async function drawWaveform() {
+      // Essai IndexedDB, fallback Firebase Storage
+      let arrayBuf = null
       const record = await getAudioFile(button.fileId)
-      if (!record || cancelled) return
-      const audioCtx = new AudioContext()
-      const arrayBuf = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+      if (record) {
+        arrayBuf = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+      } else if (button.storageUrl) {
+        try {
+          const resp = await fetch(button.storageUrl)
+          if (resp.ok) arrayBuf = await resp.arrayBuffer()
+        } catch {}
+      }
       if (!arrayBuf || cancelled) return
       let decoded
       try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { return }
@@ -85,7 +92,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
   useEffect(() => {
     if (!button?.fileId) return
-    player.loadFile(button.fileId)
+    player.loadFile(button.fileId, button.storageUrl || null)
   }, [button?.fileId])
 
   // Convertit une position X en temps

@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
-// Variables d'environnement Vite (fichier .env.local à la racine du projet)
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -11,18 +11,19 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-// Firebase actif uniquement si le projectId est renseigné
 export const FIREBASE_ENABLED = !!firebaseConfig.projectId
 
-let db = null
+let db      = null
+let storage = null
 
 if (FIREBASE_ENABLED) {
   try {
     const app = initializeApp(firebaseConfig)
-    db = getFirestore(app)
+    db      = getFirestore(app)
+    storage = getStorage(app)
   } catch (e) {
     console.warn('[Firebase] Initialisation échouée :', e.message)
   }
 }
 
-export { db }
+export { db, storage }

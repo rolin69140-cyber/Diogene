@@ -12,6 +12,7 @@ export default function useAudioPlayer() {
   const audioBufferRef  = useRef(null)   // AudioBuffer décodé (cache)
   const sourceNodeRef   = useRef(null)   // AudioBufferSourceNode en cours
   const gainNodeRef     = useRef(null)
+  const storageUrlRef   = useRef(null)   // URL Firebase Storage (fallback)
 
   // Position tracking pour le mode AudioBufferSourceNode
   const absStartRef  = useRef(0)   // audioCtx.currentTime au moment du start
@@ -156,8 +157,8 @@ export default function useAudioPlayer() {
     return true
   }, [getOrCreateCtx, stopSourceNode, stopRaf])
 
-  /** Charge (ou recharge) un fichier audio depuis l'IndexedDB */
-  const loadFile = useCallback(async (fileId) => {
+  /** Charge (ou recharge) un fichier audio depuis l'IndexedDB ou Firebase Storage */
+  const loadFile = useCallback(async (fileId, storageUrl = null) => {
     if (loadedFileIdRef.current === fileId && audioRef.current?.src) return true
 
     // Arrêt total
@@ -166,9 +167,29 @@ export default function useAudioPlayer() {
     savedPosRef.current = 0
     audioBufferRef.current = null
     gainNodeRef.current = null
+    storageUrlRef.current = storageUrl
 
+    // 1. Essai IndexedDB local
+    let data = null
+    let mimeType = 'audio/mpeg'
     const record = await getAudioFile(fileId)
-    if (!record) return false
+    if (record) {
+      data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+      mimeType = record.type || 'audio/mpeg'
+    } else if (storageUrl) {
+      // 2. Fallback Firebase Storage
+      try {
+        const response = await fetch(storageUrl)
+        if (response.ok) {
+          data = await response.arrayBuffer()
+          mimeType = response.headers.get('content-type') || 'audio/mpeg'
+        }
+      } catch (e) {
+        console.warn('[AudioPlayer] fetch storageUrl failed:', e)
+      }
+    }
+
+    if (!data) return false
 
     const audio = getAudio()
     audio.pause()
@@ -177,13 +198,8 @@ export default function useAudioPlayer() {
 
     if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
 
-    // Données brutes
-    const data = record.data instanceof ArrayBuffer
-      ? record.data
-      : await record.data.arrayBuffer?.()
-
     // Blob URL pour HTMLAudioElement
-    const blob = new Blob([data], { type: record.type || 'audio/mpeg' })
+    const blob = new Blob([data], { type: mimeType })
     blobUrlRef.current = URL.createObjectURL(blob)
     audio.src = blobUrlRef.current
     audio.load()
@@ -322,13 +338,19 @@ export default function useAudioPlayer() {
 
     if (semitones !== 0 && !audioBufferRef.current) {
       console.warn('[AudioPlayer] AudioBuffer not ready — trying to decode now')
-      // Tentative de décodage tardif
+      // Tentative de décodage tardif (IndexedDB ou Firebase Storage)
       if (loadedFileIdRef.current) {
         try {
+          let data = null
           const record = await getAudioFile(loadedFileIdRef.current)
           if (record) {
+            data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+          } else if (storageUrlRef.current) {
+            const response = await fetch(storageUrlRef.current)
+            if (response.ok) data = await response.arrayBuffer()
+          }
+          if (data) {
             const ctx = await getOrCreateCtx()
-            const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
             audioBufferRef.current = await ctx.decodeAudioData(data.slice(0))
           }
         } catch (e) {
