@@ -3,7 +3,7 @@ import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/ind
 import useImportAudio, { PDF_LABELS, PDF_MAX } from '../hooks/useImportAudio'
 import useLibrary from '../hooks/useLibrary'
 
-const TABS = ['Chants', 'Sets']
+const TABS = ['Chants', 'Sets', 'Notes d\'attaque']
 
 export default function Librairie() {
   const [tab, setTab] = useState('Chants')
@@ -21,7 +21,7 @@ export default function Librairie() {
           </button>
         ))}
       </div>
-      {tab === 'Chants' ? <ChantsTab /> : <SetsTab />}
+      {tab === 'Chants' ? <ChantsTab /> : tab === 'Sets' ? <SetsTab /> : <NotesAttaqueTab />}
     </div>
   )
 }
@@ -946,6 +946,135 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Onglet Notes d'attaque (saisie rapide) ────────────────────────────────────
+function NotesAttaqueTab() {
+  const songs = useStore((s) => s.songs)
+  const updateSong = useStore((s) => s.updateSong)
+
+  const [grid, setGrid] = useState(() => {
+    const init = {}
+    for (const song of songs) {
+      init[song.id] = {}
+      for (const p of PUPITRES) {
+        const notes = song.attackNotes?.[p] || []
+        init[song.id][p] = [notes[0] || '', notes[1] || '']
+      }
+    }
+    return init
+  })
+
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setGrid((prev) => {
+      const next = { ...prev }
+      for (const song of songs) {
+        if (!next[song.id]) {
+          next[song.id] = {}
+          for (const p of PUPITRES) {
+            const notes = song.attackNotes?.[p] || []
+            next[song.id][p] = [notes[0] || '', notes[1] || '']
+          }
+        }
+      }
+      return next
+    })
+  }, [songs.length])
+
+  const handleChange = (songId, pupitre, idx, value) => {
+    setGrid((prev) => ({
+      ...prev,
+      [songId]: {
+        ...prev[songId],
+        [pupitre]: prev[songId][pupitre].map((v, i) => i === idx ? value : v),
+      },
+    }))
+    setSaved(false)
+  }
+
+  const handleSaveAll = () => {
+    for (const song of songs) {
+      const attackNotes = {}
+      for (const p of PUPITRES) {
+        const notes = (grid[song.id]?.[p] || []).filter((n) => n.trim())
+        if (notes.length) attackNotes[p] = notes
+      }
+      updateSong(song.id, { attackNotes })
+    }
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
+  const sorted = [...songs].sort((a, b) => a.name.localeCompare(b.name))
+
+  if (songs.length === 0) {
+    return (
+      <div className="p-8 text-center text-gray-400 text-sm">
+        Aucun chant dans la bibliothèque.<br />Importez d'abord vos fichiers audio dans l'onglet Chants.
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-3">
+      <p className="text-xs text-gray-500 mb-3">
+        Saisissez les notes d'attaque pour tous les chants en une seule fois.<br />
+        Format : <span className="font-mono">Do4</span>, <span className="font-mono">Mi4</span>, <span className="font-mono">Sol4</span>…
+      </p>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-2 pr-3 font-medium text-gray-600 dark:text-gray-400 min-w-[120px]">Chant</th>
+              {PUPITRES.map((p) => (
+                <th key={p} className="py-2 px-1 font-bold text-center w-28" style={{ color: PUPITRE_COLORS[p] }}>
+                  {PUPITRE_LABELS[p]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((song) => (
+              <tr key={song.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <td className="py-2 pr-3 font-medium text-xs truncate max-w-[130px]">{song.name}</td>
+                {PUPITRES.map((p) => (
+                  <td key={p} className="py-1 px-1">
+                    <div className="flex flex-col gap-0.5">
+                      <input
+                        value={grid[song.id]?.[p]?.[0] || ''}
+                        onChange={(e) => handleChange(song.id, p, 0, e.target.value)}
+                        placeholder="Note 1"
+                        className="w-full border rounded px-1.5 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                      />
+                      <input
+                        value={grid[song.id]?.[p]?.[1] || ''}
+                        onChange={(e) => handleChange(song.id, p, 1, e.target.value)}
+                        placeholder="Note 2"
+                        className="w-full border rounded px-1.5 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                      />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="sticky bottom-0 pt-3 pb-2 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 mt-3">
+        <button
+          onClick={handleSaveAll}
+          className={`w-full py-3 rounded-xl font-semibold text-sm transition-colors
+            ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white active:bg-blue-700'}`}
+        >
+          {saved ? '✓ Enregistré !' : '💾 Enregistrer toutes les notes'}
+        </button>
+      </div>
     </div>
   )
 }
