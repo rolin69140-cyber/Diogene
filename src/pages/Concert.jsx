@@ -201,6 +201,15 @@ export default function Concert() {
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
 
+  const speakHint = (text) => {
+    if (!text || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.lang = 'fr-FR'
+    utt.rate = 0.95
+    window.speechSynthesis.speak(utt)
+  }
+
   // Chants du set sélectionné (ou tous)
   const activeSet = sets.find((s) => s.id === activeSetId)
   const setSongs = activeSet
@@ -291,6 +300,7 @@ export default function Concert() {
 
             const btnLabel = isMine ? 'Ma voix' : (customLabel || p)
             const btnFontSize = btnLabel.length > 6 ? Math.min(13, baseFontSize) : btnLabel.length > 4 ? Math.min(16, baseFontSize) : btnLabel.length > 2 ? Math.min(18, baseFontSize) : baseFontSize
+            const hint = currentSong?.buttonHints?.[p]
 
             return (
               <div key={p} className="relative flex flex-col items-center gap-1">
@@ -302,6 +312,7 @@ export default function Concert() {
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')
+                    if (hint) speakHint(hint)
                   }}
                   onPointerUp={() => { holdStopRef.current?.(); holdStopRef.current = null }}
                   onPointerCancel={() => { holdStopRef.current?.(); holdStopRef.current = null }}

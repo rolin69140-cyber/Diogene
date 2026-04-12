@@ -242,6 +242,15 @@ export default function Repetition() {
   const [directorSongId, setDirectorSongId]   = useState(null) // modal chef de chœur
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
 
+  const speakHint = (text) => {
+    if (!text || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.lang = 'fr-FR'
+    utt.rate = 0.95
+    window.speechSynthesis.speak(utt)
+  }
+
   const activeSong = songs.find((s) => s.id === activeSongId)
   const buttonSize = settings.buttonSize || 'normal'
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
@@ -326,6 +335,7 @@ export default function Repetition() {
               ? activeSong.pdfFiles
               : (activeSong?.lyricsFileId ? [{ id: activeSong.lyricsFileId, label: 'Paroles' }] : [])
             const hasLyrics = !!(activeSong?.lyricsText || songPdfs.length > 0)
+            const hint = activeSong?.buttonHints?.[p]
 
             return (
               <div key={p} className="relative flex flex-col items-center gap-1">
@@ -338,6 +348,7 @@ export default function Repetition() {
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')
+                    if (hint) speakHint(hint)
                   }}
                   onPointerUp={() => { holdStopRef.current?.(); holdStopRef.current = null }}
                   onPointerCancel={() => { holdStopRef.current?.(); holdStopRef.current = null }}

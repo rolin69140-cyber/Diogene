@@ -1009,7 +1009,19 @@ function NotesAttaqueTab() {
     return init
   }
 
+  const initHints = (songList) => {
+    const init = {}
+    for (const song of songList) {
+      init[song.id] = {}
+      for (const p of songCols(song)) {
+        init[song.id][p] = song.buttonHints?.[p] || ''
+      }
+    }
+    return init
+  }
+
   const [grid, setGrid] = useState(() => initGrid(songs))
+  const [hints, setHints] = useState(() => initHints(songs))
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -1021,6 +1033,18 @@ function NotesAttaqueTab() {
           for (const p of songCols(song)) {
             const notes = song.attackNotes?.[p] || []
             next[song.id][p] = [notes[0] || '', notes[1] || '']
+          }
+        }
+      }
+      return next
+    })
+    setHints((prev) => {
+      const next = { ...prev }
+      for (const song of songs) {
+        if (!next[song.id]) {
+          next[song.id] = {}
+          for (const p of songCols(song)) {
+            next[song.id][p] = song.buttonHints?.[p] || ''
           }
         }
       }
@@ -1039,14 +1063,25 @@ function NotesAttaqueTab() {
     setSaved(false)
   }
 
+  const handleHintChange = (songId, pupitre, value) => {
+    setHints((prev) => ({
+      ...prev,
+      [songId]: { ...prev[songId], [pupitre]: value },
+    }))
+    setSaved(false)
+  }
+
   const handleSaveAll = () => {
     for (const song of songs) {
       const attackNotes = {}
+      const buttonHints = {}
       for (const p of songCols(song)) {
         const notes = (grid[song.id]?.[p] || []).filter((n) => n.trim())
         if (notes.length) attackNotes[p] = notes
+        const hint = hints[song.id]?.[p]?.trim()
+        if (hint) buttonHints[p] = hint
       }
-      updateSong(song.id, { attackNotes })
+      updateSong(song.id, { attackNotes, buttonHints })
     }
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -1106,6 +1141,12 @@ function NotesAttaqueTab() {
                             onChange={(e) => handleChange(song.id, p, 1, e.target.value)}
                             placeholder="Note 2"
                             className="w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                          />
+                          <input
+                            value={hints[song.id]?.[p] || ''}
+                            onChange={(e) => handleHintChange(song.id, p, e.target.value)}
+                            placeholder="💬 Phrase…"
+                            className="w-full border border-dashed rounded px-1 py-1 text-xs text-center italic text-gray-500 dark:bg-gray-900 dark:border-gray-600 focus:border-amber-400 focus:outline-none"
                           />
                         </div>
                       ) : (
