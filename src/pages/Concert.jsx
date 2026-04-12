@@ -201,6 +201,7 @@ export default function Concert() {
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
+  const [showCueText, setShowCueText] = useState(false)
   const customBg = useBgImage('bg_concert')
 
   const speakHint = (text) => {
@@ -390,20 +391,28 @@ export default function Concert() {
             )}
           </div>
         )}
+        {/* Bouton texte de scène */}
+        {currentSong?.cueText && (
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={() => setShowCueText((v) => !v)}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${showCueText ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+              {showCueText ? '🎵 Voir les chants' : '📋 Texte de scène'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Texte de scène ── */}
-      {currentSong?.cueText && (
-        <div className="mx-4 mb-2 rounded-xl bg-white/80 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="max-h-40 overflow-y-auto px-3 py-2 whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200"
+      {/* ── Texte de scène (plein écran) ── */}
+      {showCueText && currentSong?.cueText ? (
+        <div className="flex-1 overflow-y-auto px-4 pt-2 pb-4">
+          <div className="whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200"
             style={{ fontSize: currentSong.cueTextSize === 'sm' ? '12px' : currentSong.cueTextSize === 'lg' ? '18px' : currentSong.cueTextSize === 'xl' ? '22px' : currentSong.cueTextSize === '2xl' ? '26px' : '15px' }}>
             {currentSong.cueText}
           </div>
         </div>
-      )}
-
-      {/* ── Liste des chants (même structure que Répétition) ── */}
-      <div className="flex-1 overflow-y-auto px-4 pt-3">
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 pt-3">
 
         {/* Sélecteur de set + Mode scène */}
         <div className="flex gap-2 mb-3 overflow-x-auto pb-1 items-center">
@@ -449,6 +458,7 @@ export default function Concert() {
           })}
         </div>
       </div>
+      )}
 
       {/* Navigation Précédent/Suivant — uniquement si set sélectionné */}
       {activeSetId && setSongs.length > 1 && (

@@ -242,6 +242,7 @@ export default function Repetition() {
   const [notesSongId, setNotesSongId]         = useState(null) // modal prise de notes
   const [directorSongId, setDirectorSongId]   = useState(null) // modal chef de chœur
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
+  const [showCueText, setShowCueText] = useState(false)
   const customBg = useBgImage('bg_repetition')
 
   const speakHint = (text) => {
@@ -440,18 +441,27 @@ export default function Repetition() {
         )}
       </div>
 
-      {/* ── Texte de scène ── */}
+      {/* Bouton texte de scène */}
       {activeSong?.cueText && (
-        <div className="mx-4 mb-2 rounded-xl bg-white/80 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="max-h-40 overflow-y-auto px-3 py-2 whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200"
+        <div className="flex justify-center mt-1 mb-1">
+          <button
+            onClick={() => setShowCueText((v) => !v)}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${showCueText ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+            {showCueText ? '🎵 Voir les chants' : '📋 Texte de scène'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Texte de scène (plein écran) ── */}
+      {showCueText && activeSong?.cueText ? (
+        <div className="flex-1 overflow-y-auto px-4 pt-2 pb-4">
+          <div className="whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200"
             style={{ fontSize: activeSong.cueTextSize === 'sm' ? '12px' : activeSong.cueTextSize === 'lg' ? '18px' : activeSong.cueTextSize === 'xl' ? '22px' : activeSong.cueTextSize === '2xl' ? '26px' : '15px' }}>
             {activeSong.cueText}
           </div>
         </div>
-      )}
-
-      {/* Liste des chants */}
-      <div className="flex-1 overflow-y-auto px-4 pt-3">
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 pt-3">
         {/* Sélecteur de set */}
         {sets.length > 0 && (
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
@@ -543,6 +553,7 @@ export default function Repetition() {
           })}
         </div>
       </div>
+      )}
 
       {/* Modals */}
       {playerState?.isOpen && (
