@@ -57,8 +57,14 @@ function ChantsTab() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const handleFilesDrop = async (files) => {
-    const audioFiles = Array.from(files).filter((f) => f.type.startsWith('audio/') || f.name.endsWith('.mp3') || f.name.endsWith('.wav'))
-    if (audioFiles.length > 0) await analyzeFiles(audioFiles)
+    const validFiles = Array.from(files).filter((f) =>
+      f.type.startsWith('audio/') ||
+      f.name.toLowerCase().endsWith('.mp3') ||
+      f.name.toLowerCase().endsWith('.wav') ||
+      f.type === 'application/pdf' ||
+      f.name.toLowerCase().endsWith('.pdf')
+    )
+    if (validFiles.length > 0) await analyzeFiles(validFiles)
   }
 
   return (
@@ -201,7 +207,7 @@ function DropZone({ onFiles, importing, importProgress }) {
           <p className="text-xs mt-1">ou</p>
           <label className="mt-2 inline-block cursor-pointer text-blue-600 dark:text-blue-400 underline text-sm">
             Parcourir
-            <input type="file" multiple accept="audio/*,.mp3,.wav" className="hidden" onChange={(e) => onFiles(e.target.files)} />
+            <input type="file" multiple accept="audio/*,.mp3,.wav,.pdf" className="hidden" onChange={(e) => onFiles(e.target.files)} />
           </label>
           <p className="text-xs text-gray-400 mt-1">Format : "Basses - NomDuChant.mp3"</p>
         </>
