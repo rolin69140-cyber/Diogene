@@ -11,21 +11,56 @@ import {
 export const PDF_LABELS = ['Paroles', 'Partition', 'Accompagnement', 'Direction']
 export const PDF_MAX = 4
 
+const PDF_LABEL_PATTERNS = [
+  { pattern: /parole|lyric|texte|chanson/i, label: 'Paroles' },
+  { pattern: /partition|score|sheet/i,      label: 'Partition' },
+  { pattern: /accomp|piano|clavier|orgue/i, label: 'Accompagnement' },
+  { pattern: /direction|chef|conducteur|conductor|director/i, label: 'Direction' },
+]
+
 function detectPdfLabel(filename) {
   const lower = filename.toLowerCase()
-  if (/parole|lyric|texte|chanson|voix/.test(lower)) return 'Paroles'
-  if (/partition|score|sheet|note/.test(lower)) return 'Partition'
-  if (/accomp|piano|clavier|orgue/.test(lower)) return 'Accompagnement'
-  if (/direction|chef|conducteur|conductor|director/.test(lower)) return 'Direction'
+  for (const { pattern, label } of PDF_LABEL_PATTERNS) {
+    if (pattern.test(lower)) return label
+  }
   return 'Paroles' // défaut
+}
+
+/**
+ * Détecte le nom du chant et le label depuis un nom de fichier PDF.
+ * Exemples reconnus :
+ *   "Ave Maria - Paroles.pdf"       → { songName: "Ave Maria", label: "Paroles" }
+ *   "Partition - Laudate.pdf"       → { songName: "Laudate",   label: "Partition" }
+ *   "Gloria Paroles.pdf"            → { songName: "Gloria",    label: "Paroles" }
+ */
+function detectPdfSongAndLabel(filename) {
+  const base = filename.replace(/\.pdf$/i, '').replace(/_/g, ' ').normalize('NFC')
+
+  for (const { pattern, label } of PDF_LABEL_PATTERNS) {
+    // Format "NomDuChant - Label"
+    const m1 = base.match(new RegExp(`^(.+?)\\s*[-–]\\s*${pattern.source}.*$`, 'i'))
+    if (m1) return { songName: m1[1].trim(), label }
+
+    // Format "Label - NomDuChant"
+    const m2 = base.match(new RegExp(`^${pattern.source}.*?\\s*[-–]\\s*(.+)$`, 'i'))
+    if (m2) return { songName: m2[1].trim(), label }
+
+    // Format "NomDuChant Label" (label en fin de nom)
+    const m3 = base.match(new RegExp(`^(.+?)\\s+${pattern.source}\\S*$`, 'i'))
+    if (m3) return { songName: m3[1].trim(), label }
+  }
+
+  // Aucun label détecté → tout le nom = nom du chant
+  return { songName: base.trim(), label: 'Paroles' }
 }
 
 export default function useImportAudio() {
   const [importing, setImporting] = useState(false)
-  const [importProgress, setImportProgress] = useState('')  // message de progression
+  const [importProgress, setImportProgress] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
   const [proposals, setProposals] = useState([])
+  const [pendingPdfs, setPendingPdfs] = useState([]) // PDFs détectés dans le lot, associés après confirmation
   const addSong = useStore((s) => s.addSong)
   const updateSong = useStore((s) => s.updateSong)
   const addAudioButton = useStore((s) => s.addAudioButton)
@@ -41,44 +76,53 @@ export default function useImportAudio() {
       reader.readAsArrayBuffer(file)
     })
 
-  // Import d'un lot de fichiers audio — analyse locale uniquement (rapide)
-  // L'ArrayBuffer est libéré après sauvegarde IndexedDB pour économiser la mémoire
+  // Import d'un lot mixte (audio + PDF) — analyse locale uniquement (rapide)
   const analyzeFiles = useCallback(async (files) => {
     setImporting(true)
-    const results = []
-    const total = files.length
+    const audioResults = []
+    const pdfResults = []
+    const allFiles = Array.from(files)
+    const total = allFiles.length
 
     for (let i = 0; i < total; i++) {
-      const file = files[i]
+      const file = allFiles[i]
       setImportProgress(`Lecture ${i + 1} / ${total} : ${file.name}`)
-      const detected = detectAudioPrefix(file.name)
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+
       const fileId = crypto.randomUUID()
       const arrayBuffer = await readFileAsArrayBuffer(file)
 
-      // Sauvegarde locale (IndexedDB), puis on libère la mémoire
-      await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
-      // arrayBuffer n'est plus gardé en mémoire — on le relira depuis IndexedDB pour l'upload
-
-      const songName = detected
-        ? detected.songName
-        : file.name.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
-      results.push({
-        fileName: file.name,
-        songName,
-        button: detected?.button || 'Tutti',
-        pupitres: detected?.pupitres || [],
-        fileId,
-        mimeType: file.type || 'audio/mpeg',
-        storageUrl: null,
-        confirmed: songName !== '',
-        needsSongName: songName === '',
-      })
+      if (isPdf) {
+        // Sauvegarde locale PDF
+        await savePdfFile(fileId, arrayBuffer, file.name)
+        const { songName, label } = detectPdfSongAndLabel(file.name)
+        pdfResults.push({ fileId, fileName: file.name, songName, label })
+      } else {
+        // Sauvegarde locale audio
+        await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
+        const detected = detectAudioPrefix(file.name)
+        const songName = detected
+          ? detected.songName
+          : file.name.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
+        audioResults.push({
+          fileName: file.name,
+          songName,
+          button: detected?.button || 'Tutti',
+          pupitres: detected?.pupitres || [],
+          fileId,
+          mimeType: file.type || 'audio/mpeg',
+          storageUrl: null,
+          confirmed: songName !== '',
+          needsSongName: songName === '',
+        })
+      }
     }
 
-    setProposals(results)
+    setProposals(audioResults)
+    setPendingPdfs(pdfResults)
     setImporting(false)
     setImportProgress('')
-    return results
+    return audioResults
   }, [])
 
   // Confirme et intègre les propositions dans la bibliothèque
@@ -128,39 +172,94 @@ export default function useImportAudio() {
 
     setProposals([])
 
+    // --- Phase 1b : associer les PDFs du lot aux chants créés/trouvés ---
+    const currentPdfs = pendingPdfs
+    setPendingPdfs([])
+
+    for (const pdf of currentPdfs) {
+      const key = pdf.songName.toLowerCase()
+      // Chercher d'abord dans les chants du lot, puis dans la bibliothèque existante
+      const allSongs = useStore.getState().songs
+      const matchedSong = allSongs.find((s) => s.name.normalize('NFC').toLowerCase() === key)
+        || allSongs.find((s) => s.name.normalize('NFC').toLowerCase().includes(key) && key.length > 3)
+        || allSongs.find((s) => key.includes(s.name.normalize('NFC').toLowerCase()) && s.name.length > 3)
+
+      if (matchedSong) {
+        const existingPdfs = matchedSong.pdfFiles || []
+        if (existingPdfs.length < PDF_MAX) {
+          // Dédoublonner le label
+          const existingLabels = existingPdfs.map((p) => p.label)
+          let label = pdf.label
+          if (existingLabels.includes(label)) {
+            // Renommer l'existant en "Label 1" et le nouveau en "Label 2"
+            const existing = existingPdfs.find((p) => p.label === label)
+            if (existing) useStore.getState().renamePdfInSong(matchedSong.id, existing.id, `${label} 1`)
+            label = `${label} 2`
+          }
+          useStore.getState().addPdfToSong(matchedSong.id, {
+            id: crypto.randomUUID(),
+            fileId: pdf.fileId,
+            name: pdf.fileName,
+            label,
+            storageUrl: null, // sera mis à jour lors de l'upload
+          })
+          // Ajouter aux uploads
+          toUpload.push({ item: { fileId: pdf.fileId, mimeType: 'application/pdf' }, songId: matchedSong.id, isPdf: true })
+        }
+      }
+      // Si aucun chant trouvé, le PDF est ignoré silencieusement
+      // (cas rare : PDF dont le nom ne correspond à aucun chant importé)
+    }
+
     // --- Phase 2 : upload Firebase séquentiel en arrière-plan ---
     ;(async () => {
       setUploading(true)
       setUploadProgress({ done: 0, total: toUpload.length })
 
       for (let i = 0; i < toUpload.length; i++) {
-        const { item, songId, btnId } = toUpload[i]
+        const { item, songId, isPdf } = toUpload[i]
         setUploadProgress({ done: i, total: toUpload.length })
         try {
-          // Relire depuis IndexedDB (évite de garder 80 ArrayBuffers en mémoire)
-          const { getAudioFile } = await import('../store/index')
-          const record = await getAudioFile(item.fileId)
-          if (!record) continue
-          const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-          const storageUrl = await uploadAudioFile(item.fileId, data, item.mimeType)
-          if (storageUrl) {
-            const currentSong = useStore.getState().songs.find((s) => s.id === songId)
-            if (currentSong) {
-              const updatedButtons = (currentSong.audioButtons || []).map((b) =>
-                b.id === btnId ? { ...b, storageUrl } : b
-              )
-              useStore.getState().updateSong(songId, { audioButtons: updatedButtons })
+          const { getAudioFile, getPdfFile } = await import('../store/index')
+
+          if (isPdf) {
+            const record = await getPdfFile(item.fileId)
+            if (!record) continue
+            const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+            const storageUrl = await uploadPdfFile(item.fileId, data)
+            if (storageUrl) {
+              const currentSong = useStore.getState().songs.find((s) => s.id === songId)
+              if (currentSong) {
+                const updatedPdfs = (currentSong.pdfFiles || []).map((p) =>
+                  p.fileId === item.fileId ? { ...p, storageUrl } : p
+                )
+                useStore.getState().updateSong(songId, { pdfFiles: updatedPdfs })
+              }
+            }
+          } else {
+            const record = await getAudioFile(item.fileId)
+            if (!record) continue
+            const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+            const storageUrl = await uploadAudioFile(item.fileId, data, item.mimeType)
+            if (storageUrl) {
+              const currentSong = useStore.getState().songs.find((s) => s.id === songId)
+              if (currentSong) {
+                const updatedButtons = (currentSong.audioButtons || []).map((b) =>
+                  b.id === toUpload[i].btnId ? { ...b, storageUrl } : b
+                )
+                useStore.getState().updateSong(songId, { audioButtons: updatedButtons })
+              }
             }
           }
         } catch (e) {
-          console.warn('[Firebase] upload failed:', item.fileName, e)
+          console.warn('[Firebase] upload failed:', item.fileId, e)
         }
       }
 
       setUploadProgress({ done: toUpload.length, total: toUpload.length })
       setTimeout(() => { setUploading(false); setUploadProgress({ done: 0, total: 0 }) }, 3000)
     })()
-  }, [songs, addSong, addAudioButton])
+  }, [songs, addSong, addAudioButton, pendingPdfs])
 
   // Import d'un ou plusieurs PDF ou texte de paroles
   const importLyrics = useCallback(async (files, songId) => {
