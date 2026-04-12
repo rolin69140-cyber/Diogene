@@ -253,7 +253,16 @@ export default function Concert() {
   }
 
   return (
-    <div className={`flex flex-col min-h-full ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
+    <div className={`relative flex flex-col min-h-full ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
+
+      {/* Fond scène de théâtre */}
+      <div
+        className="fixed inset-0 bg-cover bg-center pointer-events-none"
+        style={{ backgroundImage: 'url(/Scene.jpg)', opacity: 0.12, zIndex: 0 }}
+      />
+
+      {/* Contenu au-dessus du fond */}
+      <div className="relative z-10 flex flex-col min-h-full">
 
       {/* Métronome */}
       <ErrorBoundary>
@@ -445,6 +454,7 @@ export default function Concert() {
           <Paroles songId={lyricsState.songId} initialPdfId={lyricsState.pdfId} onClose={closeLyrics} />
         </Suspense>
       )}
+      </div>
     </div>
   )
 }
