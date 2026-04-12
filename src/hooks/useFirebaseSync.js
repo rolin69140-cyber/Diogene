@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef } from 'react'
 import useStore from '../store/index'
-import { subscribeSongs, subscribeSets, FIREBASE_ENABLED } from '../lib/firebaseSync'
+import { subscribeSongs, subscribeSets } from '../lib/firebaseSync'
 import { FIREBASE_ENABLED as FB } from '../lib/firebase'
 
 export default function useFirebaseSync() {
