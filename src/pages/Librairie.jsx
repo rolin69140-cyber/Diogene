@@ -32,7 +32,7 @@ function ChantsTab() {
   const addSong = useStore((s) => s.addSong)
   const updateSong = useStore((s) => s.updateSong)
   const { deleteSongWithFiles, mergeSongs, undo, canUndo, undoLabel } = useLibrary()
-  const { importing, proposals, setProposals, analyzeFiles, confirmImport, importLyrics } = useImportAudio()
+  const { importing, importProgress, uploading, uploadProgress, proposals, setProposals, analyzeFiles, confirmImport, importLyrics } = useImportAudio()
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [editSongId, setEditSongId] = useState(null)
@@ -94,7 +94,24 @@ function ChantsTab() {
       </div>
 
       {/* Zone de dépôt audio */}
-      <DropZone onFiles={handleFilesDrop} importing={importing} />
+      <DropZone onFiles={handleFilesDrop} importing={importing} importProgress={importProgress} />
+
+      {/* Barre de progression upload Firebase */}
+      {uploading && (
+        <div className="mb-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-300">☁️ Envoi vers le cloud…</span>
+            <span className="text-xs text-blue-500">{uploadProgress.done} / {uploadProgress.total}</span>
+          </div>
+          <div className="w-full bg-blue-100 dark:bg-blue-900 rounded-full h-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress.total ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="text-xs text-blue-400 mt-1">Les chants sont déjà utilisables. L'upload continue en arrière-plan.</p>
+        </div>
+      )}
 
       {/* Propositions d'import */}
       {proposals.length > 0 && (
@@ -162,7 +179,7 @@ function ChantsTab() {
   )
 }
 
-function DropZone({ onFiles, importing }) {
+function DropZone({ onFiles, importing, importProgress }) {
   const [over, setOver] = useState(false)
 
   return (
@@ -174,7 +191,10 @@ function DropZone({ onFiles, importing }) {
         ${over ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-gray-300 dark:border-gray-700'}`}
     >
       {importing ? (
-        <span>Analyse en cours…</span>
+        <div>
+          <p className="font-medium text-blue-600 dark:text-blue-400">Analyse en cours…</p>
+          {importProgress && <p className="text-xs text-gray-400 mt-1 truncate">{importProgress}</p>}
+        </div>
       ) : (
         <>
           <p>Déposer des fichiers audio ici</p>

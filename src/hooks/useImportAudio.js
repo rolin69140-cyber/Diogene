@@ -22,6 +22,9 @@ function detectPdfLabel(filename) {
 
 export default function useImportAudio() {
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState('')  // message de progression
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
   const [proposals, setProposals] = useState([])
   const addSong = useStore((s) => s.addSong)
   const updateSong = useStore((s) => s.updateSong)
@@ -38,22 +41,26 @@ export default function useImportAudio() {
       reader.readAsArrayBuffer(file)
     })
 
-  // Import d'un lot de fichiers audio — retourne les propositions d'affectation
-  // L'upload Firebase se fait APRÈS confirmation (pas pendant l'analyse)
+  // Import d'un lot de fichiers audio — analyse locale uniquement (rapide)
+  // L'ArrayBuffer est libéré après sauvegarde IndexedDB pour économiser la mémoire
   const analyzeFiles = useCallback(async (files) => {
     setImporting(true)
     const results = []
+    const total = files.length
 
-    for (const file of files) {
+    for (let i = 0; i < total; i++) {
+      const file = files[i]
+      setImportProgress(`Lecture ${i + 1} / ${total} : ${file.name}`)
       const detected = detectAudioPrefix(file.name)
       const fileId = crypto.randomUUID()
       const arrayBuffer = await readFileAsArrayBuffer(file)
 
-      // Sauvegarde locale uniquement (rapide)
+      // Sauvegarde locale (IndexedDB), puis on libère la mémoire
       await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
+      // arrayBuffer n'est plus gardé en mémoire — on le relira depuis IndexedDB pour l'upload
 
       const songName = detected
-        ? detected.songName  // peut être '' si préfixe seul sans nom de chant
+        ? detected.songName
         : file.name.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
       results.push({
         fileName: file.name,
@@ -61,7 +68,6 @@ export default function useImportAudio() {
         button: detected?.button || 'Tutti',
         pupitres: detected?.pupitres || [],
         fileId,
-        arrayBuffer,   // gardé en mémoire pour l'upload post-confirmation
         mimeType: file.type || 'audio/mpeg',
         storageUrl: null,
         confirmed: songName !== '',
@@ -71,6 +77,7 @@ export default function useImportAudio() {
 
     setProposals(results)
     setImporting(false)
+    setImportProgress('')
     return results
   }, [])
 
@@ -121,28 +128,37 @@ export default function useImportAudio() {
 
     setProposals([])
 
-    // --- Phase 2 : upload Firebase en arrière-plan ---
+    // --- Phase 2 : upload Firebase séquentiel en arrière-plan ---
     ;(async () => {
-      const updateAudioButton = useStore.getState().updateSong // on va patcher via updateSong
+      setUploading(true)
+      setUploadProgress({ done: 0, total: toUpload.length })
 
-      for (const { item, songId, btnId } of toUpload) {
-        if (!item.arrayBuffer) continue
+      for (let i = 0; i < toUpload.length; i++) {
+        const { item, songId, btnId } = toUpload[i]
+        setUploadProgress({ done: i, total: toUpload.length })
         try {
-          const storageUrl = await uploadAudioFile(item.fileId, item.arrayBuffer, item.mimeType)
+          // Relire depuis IndexedDB (évite de garder 80 ArrayBuffers en mémoire)
+          const { getAudioFile } = await import('../store/index')
+          const record = await getAudioFile(item.fileId)
+          if (!record) continue
+          const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+          const storageUrl = await uploadAudioFile(item.fileId, data, item.mimeType)
           if (storageUrl) {
-            // Mettre à jour le bouton avec la storageUrl
             const currentSong = useStore.getState().songs.find((s) => s.id === songId)
             if (currentSong) {
               const updatedButtons = (currentSong.audioButtons || []).map((b) =>
                 b.id === btnId ? { ...b, storageUrl } : b
               )
-              updateAudioButton(songId, { audioButtons: updatedButtons })
+              useStore.getState().updateSong(songId, { audioButtons: updatedButtons })
             }
           }
         } catch (e) {
-          console.warn('[Firebase] uploadAudioFile failed:', item.fileName, e)
+          console.warn('[Firebase] upload failed:', item.fileName, e)
         }
       }
+
+      setUploadProgress({ done: toUpload.length, total: toUpload.length })
+      setTimeout(() => { setUploading(false); setUploadProgress({ done: 0, total: 0 }) }, 3000)
     })()
   }, [songs, addSong, addAudioButton])
 
@@ -262,5 +278,5 @@ export default function useImportAudio() {
     }
   }, [songs, updateSong, addPdfToSong, renamePdfInSong])
 
-  return { importing, proposals, setProposals, analyzeFiles, confirmImport, importLyrics }
+  return { importing, importProgress, uploading, uploadProgress, proposals, setProposals, analyzeFiles, confirmImport, importLyrics }
 }
