@@ -39,6 +39,7 @@ export default function useImportAudio() {
     })
 
   // Import d'un lot de fichiers audio — retourne les propositions d'affectation
+  // L'upload Firebase se fait APRÈS confirmation (pas pendant l'analyse)
   const analyzeFiles = useCallback(async (files) => {
     setImporting(true)
     const results = []
@@ -48,16 +49,8 @@ export default function useImportAudio() {
       const fileId = crypto.randomUUID()
       const arrayBuffer = await readFileAsArrayBuffer(file)
 
-      // Sauvegarde locale (IndexedDB)
+      // Sauvegarde locale uniquement (rapide)
       await saveAudioFile(fileId, arrayBuffer, file.name, file.type)
-
-      // Upload vers Firebase Storage
-      let storageUrl = null
-      try {
-        storageUrl = await uploadAudioFile(fileId, arrayBuffer, file.type || 'audio/mpeg')
-      } catch (e) {
-        console.warn('[Firebase] uploadAudioFile failed:', e)
-      }
 
       const songName = detected
         ? detected.songName  // peut être '' si préfixe seul sans nom de chant
@@ -68,9 +61,11 @@ export default function useImportAudio() {
         button: detected?.button || 'Tutti',
         pupitres: detected?.pupitres || [],
         fileId,
-        storageUrl,
-        confirmed: songName !== '', // non coché si nom de chant manquant
-        needsSongName: songName === '', // flag pour signaler à l'UI
+        arrayBuffer,   // gardé en mémoire pour l'upload post-confirmation
+        mimeType: file.type || 'audio/mpeg',
+        storageUrl: null,
+        confirmed: songName !== '',
+        needsSongName: songName === '',
       })
     }
 
@@ -80,6 +75,8 @@ export default function useImportAudio() {
   }, [])
 
   // Confirme et intègre les propositions dans la bibliothèque
+  // 1. Mise à jour locale immédiate
+  // 2. Upload Firebase en arrière-plan (sans bloquer l'UI)
   const confirmImport = useCallback(async (confirmedProposals) => {
     const byName = {}
     for (const p of confirmedProposals) {
@@ -90,44 +87,63 @@ export default function useImportAudio() {
       byName[key].items.push(p)
     }
 
+    // --- Phase 1 : mise à jour locale immédiate (sans storageUrl encore) ---
+    const toUpload = [] // { item, songId, btnId }
+
     for (const [key, { name, items }] of Object.entries(byName)) {
       let song = songs.find((s) => s.name.normalize('NFC').toLowerCase() === key)
 
-      // Construire les boutons avec storageUrl inclus
       const newButtons = items.map((item) => ({
         id: crypto.randomUUID(),
         label: item.button,
         pupitres: item.pupitres,
         fileId: item.fileId,
         fileName: item.fileName,
-        storageUrl: item.storageUrl || null,
+        storageUrl: null, // sera mis à jour après upload
       }))
 
+      let songId
       if (!song) {
         const newId = crypto.randomUUID()
-        const newSong = { id: newId, name, audioButtons: newButtons, attackNotes: {} }
+        songId = newId
         addSong({ id: newId, name, audioButtons: [], attackNotes: {} })
         for (const btn of newButtons) addAudioButton(newId, btn)
-        // Sauvegarder dans Firestore
-        try {
-          await fbSaveSong(newSong)
-        } catch (e) {
-          console.warn('[Firebase] saveSong failed:', e)
-        }
       } else {
+        songId = song.id
         for (const btn of newButtons) addAudioButton(song.id, btn)
-        // Sauvegarder la chanson complète dans Firestore
-        try {
-          await fbSaveSong({
-            ...song,
-            audioButtons: [...(song.audioButtons || []), ...newButtons],
-          })
-        } catch (e) {
-          console.warn('[Firebase] saveSong failed:', e)
-        }
+      }
+
+      // Préparer les uploads
+      for (let i = 0; i < items.length; i++) {
+        toUpload.push({ item: items[i], songId, btnId: newButtons[i].id })
       }
     }
+
     setProposals([])
+
+    // --- Phase 2 : upload Firebase en arrière-plan ---
+    ;(async () => {
+      const updateAudioButton = useStore.getState().updateSong // on va patcher via updateSong
+
+      for (const { item, songId, btnId } of toUpload) {
+        if (!item.arrayBuffer) continue
+        try {
+          const storageUrl = await uploadAudioFile(item.fileId, item.arrayBuffer, item.mimeType)
+          if (storageUrl) {
+            // Mettre à jour le bouton avec la storageUrl
+            const currentSong = useStore.getState().songs.find((s) => s.id === songId)
+            if (currentSong) {
+              const updatedButtons = (currentSong.audioButtons || []).map((b) =>
+                b.id === btnId ? { ...b, storageUrl } : b
+              )
+              updateAudioButton(songId, { audioButtons: updatedButtons })
+            }
+          }
+        } catch (e) {
+          console.warn('[Firebase] uploadAudioFile failed:', item.fileName, e)
+        }
+      }
+    })()
   }, [songs, addSong, addAudioButton])
 
   // Import d'un ou plusieurs PDF ou texte de paroles
