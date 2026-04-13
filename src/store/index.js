@@ -12,8 +12,8 @@ function toCloud(song) {
 }
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
-const DB_NAME = 'diogene'
-const DB_VERSION = 2
+const DB_NAME = 'diogene-files-v2'
+const DB_VERSION = 1
 
 // Connexion unique réutilisée (évite d'ouvrir/fermer pour chaque fichier)
 let _dbPromise = null
