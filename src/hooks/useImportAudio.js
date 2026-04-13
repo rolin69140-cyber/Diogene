@@ -110,7 +110,8 @@ export default function useImportAudio() {
           fileName: file.name,
           songName,
           button: detected?.button || 'Tutti',
-          pupitres: detected?.pupitres || [],
+          // Si aucun préfixe reconnu → on suppose un fichier global (toutes voix)
+          pupitres: detected ? (detected.pupitres || []) : ['B', 'A', 'S', 'T'],
           fileId,
           mimeType: file.type || 'audio/mpeg',
           file, // on garde le File object pour la sauvegarde post-confirmation

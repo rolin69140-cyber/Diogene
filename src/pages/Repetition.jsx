@@ -282,17 +282,20 @@ export default function Repetition() {
   const findBestButton = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return null
     const sel = new Set(selected)
+    // pupitres effectifs : [] → ['B','A','S','T'] (bouton non typé = tous les pupitres)
+    const ep = (btn) => btn.pupitres?.length > 0 ? btn.pupitres : ['B', 'A', 'S', 'T']
     // Exact match
     const exact = activeSong.audioButtons.find(
-      (b) => b.pupitres?.length === sel.size && b.pupitres.every((p) => sel.has(p))
+      (b) => { const p = ep(b); return p.length === sel.size && p.every((x) => sel.has(x)) }
     )
     if (exact) return exact
     // Best score
     let best = null, bestScore = -Infinity
     for (const btn of activeSong.audioButtons) {
-      const overlap = (btn.pupitres || []).filter((p) => sel.has(p)).length
+      const p = ep(btn)
+      const overlap = p.filter((x) => sel.has(x)).length
       if (!overlap) continue
-      const score = overlap * 10 - ((btn.pupitres || []).length - overlap)
+      const score = overlap * 10 - (p.length - overlap)
       if (score > bestScore) { bestScore = score; best = btn }
     }
     return best
