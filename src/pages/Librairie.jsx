@@ -467,6 +467,13 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
   const renameAudioButton = useStore((s) => s.renameAudioButton)
   const removePdfFromSong = useStore((s) => s.removePdfFromSong)
   const renamePdfInSong = useStore((s) => s.renamePdfInSong)
+  const deduplicateSongButtons = useStore((s) => s.deduplicateSongButtons)
+
+  // Détecte si le chant a des labels en double
+  const hasDuplicateButtons = (() => {
+    const labels = (song.audioButtons || []).map((b) => b.label)
+    return labels.length !== new Set(labels).size
+  })()
 
   const handleSave = () => {
     const attackNotes = {}
@@ -726,6 +733,12 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
               <span className="text-xs px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-800 text-gray-400 cursor-not-allowed">
                 📄 PDF ({PDF_MAX}/{PDF_MAX})
               </span>
+            )}
+            {hasDuplicateButtons && (
+              <button onClick={() => deduplicateSongButtons(song.id)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-yellow-300 text-yellow-700 bg-yellow-50 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-400 dark:bg-yellow-950">
+                🧹 Doublons
+              </button>
             )}
             <button onClick={() => setMerging(true)}
               className="text-xs px-3 py-1.5 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-400">

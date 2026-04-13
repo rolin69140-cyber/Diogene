@@ -229,6 +229,14 @@ export default function useImportAudio() {
         for (const btn of newButtons) addAudioButton(newId, btn)
       } else {
         songId = song.id
+        // Remplacer les boutons existants avec le même label (évite les doublons)
+        const currentButtons = useStore.getState().songs.find((s) => s.id === song.id)?.audioButtons || []
+        for (const btn of newButtons) {
+          const duplicates = currentButtons.filter((b) => b.label === btn.label)
+          for (const dup of duplicates) {
+            useStore.getState().removeAudioButton(song.id, dup.id)
+          }
+        }
         for (const btn of newButtons) addAudioButton(song.id, btn)
       }
 

@@ -362,6 +362,21 @@ const useStore = create(
         return { songs: newSongs }
       }),
 
+      // Dédoublonne les boutons audio : garde le dernier de chaque label
+      deduplicateSongButtons: (songId) => set((s) => {
+        const newSongs = s.songs.map((song) => {
+          if (song.id !== songId) return song
+          const seen = new Map()
+          for (const btn of (song.audioButtons || [])) {
+            seen.set(btn.label, btn) // la dernière occurrence gagne
+          }
+          return { ...song, audioButtons: Array.from(seen.values()) }
+        })
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] deduplicateSongButtons sync:', e))
+        return { songs: newSongs }
+      }),
+
       renameAudioButton: (songId, buttonId, newLabel) => set((s) => {
         const newSongs = s.songs.map((song) =>
           song.id === songId
