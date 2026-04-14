@@ -269,7 +269,7 @@ export default function Concert() {
   }
 
   return (
-    <div className={`relative flex flex-col h-full w-full overflow-hidden ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
+    <div className={`relative flex flex-col flex-1 min-h-0 w-full overflow-hidden ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
 
       {/* Fond décoratif (perso prioritaire sur défaut) */}
       <div
@@ -278,7 +278,7 @@ export default function Concert() {
       />
 
       {/* Contenu au-dessus du fond */}
-      <div className="relative z-10 flex flex-col h-full min-h-0">
+      <div className="relative z-10 flex flex-col flex-1 min-h-0">
 
       {/* Zone de commandes fixe */}
       <div className="flex-shrink-0 bg-white dark:bg-gray-900 z-20">

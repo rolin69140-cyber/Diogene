@@ -304,7 +304,7 @@ export default function Repetition() {
   const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
 
   return (
-    <div className="relative flex flex-col h-full w-full overflow-hidden">
+    <div className="relative flex flex-col flex-1 min-h-0 w-full overflow-hidden">
 
       {/* Fond tableau Diogène */}
       <div
@@ -313,7 +313,7 @@ export default function Repetition() {
       />
 
       {/* Contenu au-dessus du fond */}
-      <div className="relative z-10 flex flex-col h-full min-h-0">
+      <div className="relative z-10 flex flex-col flex-1 min-h-0">
 
       {/* Zone de commandes fixe */}
       <div className="flex-shrink-0 bg-white dark:bg-gray-900 z-20">
