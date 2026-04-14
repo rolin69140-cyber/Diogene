@@ -384,9 +384,16 @@ export default function useAudioPlayer() {
     setTranspose(semitones)
     transposeRef.current = semitones
 
+    // Stopper TOUT : HTMLAudioElement ET AudioBufferSourceNode
+    stopSourceNode()
+    if (audioRef.current) audioRef.current.pause()
+    setIsPlaying(false)
+    isPlayingRef.current = false
+    stopRaf()
+    savedPosRef.current = pos
+
     if (semitones !== 0 && !audioBufferRef.current) {
-      console.warn('[AudioPlayer] AudioBuffer not ready — trying to decode now')
-      // Tentative de décodage tardif (IndexedDB ou Firebase Storage)
+      // Décodage tardif si AudioBuffer pas encore prêt
       if (loadedFileIdRef.current) {
         try {
           let data = null
@@ -407,32 +414,32 @@ export default function useAudioPlayer() {
       }
     }
 
-    if (wasPlaying) {
-      stopSourceNode()
-      if (semitones === 0) {
-        // Retour au mode HTMLAudioElement
-        const audio = getAudio()
-        audio.preservesPitch = true
-        audio.mozPreservesPitch = true
-        audio.webkitPreservesPitch = true
-        audio.playbackRate = speedRef.current
-        audio.currentTime = pos
-        try { await audio.play() } catch {}
+    if (!wasPlaying) return
+
+    if (semitones === 0) {
+      // Mode HTMLAudioElement
+      const audio = getAudio()
+      audio.preservesPitch = true
+      audio.mozPreservesPitch = true
+      audio.webkitPreservesPitch = true
+      audio.playbackRate = speedRef.current
+      if (pos > 0 && audio.duration && isFinite(audio.duration)) audio.currentTime = pos
+      try {
+        await audio.play()
+        setIsPlaying(true)
+        isPlayingRef.current = true
         startRaf()
-      } else if (audioBufferRef.current) {
-        // Nouveau AudioBufferSourceNode avec le détune mis à jour
-        savedPosRef.current = pos
-        await startFromBuffer(pos)
-        startRaf()
-      }
-    } else {
-      stopSourceNode()
+      } catch (e) { console.warn('[AudioPlayer] play after transpose=0 failed:', e) }
+    } else if (audioBufferRef.current) {
+      // Mode AudioBufferSourceNode
       savedPosRef.current = pos
-      if (semitones === 0 && audioRef.current) {
-        audioRef.current.currentTime = pos
-      }
+      await startFromBuffer(pos)
+      setIsPlaying(true)
+      isPlayingRef.current = true
+      startRaf()
     }
-  }, [getLogicalTime, stopSourceNode, getAudio, startFromBuffer, startRaf, getOrCreateCtx])
+    // Si audioBufferRef toujours null : on reste en pause, l'utilisateur peut appuyer sur ▶
+  }, [getLogicalTime, stopSourceNode, stopRaf, getAudio, startFromBuffer, startRaf, getOrCreateCtx])
 
   const toggleLoop = useCallback(() => {
     setLoop((l) => { loopRef.current = !l; return !l })
