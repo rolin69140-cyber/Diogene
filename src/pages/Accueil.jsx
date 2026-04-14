@@ -47,7 +47,7 @@ export default function Accueil() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-full flex flex-col items-center px-4 pt-10 pb-6 bg-white dark:bg-gray-950">
+    <div className="flex-1 overflow-y-auto flex flex-col items-center px-4 pt-10 pb-6 bg-white dark:bg-gray-950">
 
       {/* ── Logo ────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center mb-8 select-none">

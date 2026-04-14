@@ -12,7 +12,7 @@ export default function Librairie() {
   const bgOpacity = useStore((s) => s.settings.bgOpacity) ?? 0.12
 
   return (
-    <div className="relative flex flex-col min-h-full">
+    <div className="relative flex flex-col flex-1 overflow-y-auto">
       {customBg && (
         <div className="fixed inset-0 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url(${customBg})`, opacity: bgOpacity, zIndex: 0 }} />

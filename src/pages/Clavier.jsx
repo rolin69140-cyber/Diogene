@@ -82,7 +82,7 @@ export default function Clavier() {
   const blackKeys = allKeys.filter((k) => k.isBlack)
 
   return (
-    <div className="p-4 flex flex-col gap-4">
+    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
       <h1 className="font-bold text-xl">Clavier</h1>
 
       {/* Sélecteur instrument */}

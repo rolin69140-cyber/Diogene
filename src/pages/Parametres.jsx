@@ -114,7 +114,7 @@ export default function Parametres() {
   )
 
   return (
-    <div className="p-4 max-w-lg mx-auto">
+    <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-bold text-xl">Paramètres</h1>
         <span className={`text-xs font-medium text-green-600 transition-opacity duration-300 ${saved ? 'opacity-100' : 'opacity-0'}`}>

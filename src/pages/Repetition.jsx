@@ -304,7 +304,7 @@ export default function Repetition() {
   const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
 
   return (
-    <div className="relative flex flex-col w-full overflow-x-hidden">
+    <div className="relative flex flex-col h-full w-full overflow-hidden">
 
       {/* Fond tableau Diogène */}
       <div
@@ -313,10 +313,10 @@ export default function Repetition() {
       />
 
       {/* Contenu au-dessus du fond */}
-      <div className="relative z-10 flex flex-col min-h-full">
+      <div className="relative z-10 flex flex-col h-full min-h-0">
 
-      {/* Zone de commandes — sticky en haut lors du scroll */}
-      <div className="sticky top-0 z-20 bg-white dark:bg-gray-900">
+      {/* Zone de commandes fixe */}
+      <div className="flex-shrink-0 bg-white dark:bg-gray-900 z-20">
 
       {/* Métronome */}
       <ErrorBoundary>
@@ -458,7 +458,7 @@ export default function Repetition() {
         </div>
       )}
 
-      </div>{/* fin zone sticky */}
+      </div>{/* fin zone commandes */}
 
       {/* ── Texte de scène (plein écran) ── */}
       {showCueText && activeSong?.cueText ? (
