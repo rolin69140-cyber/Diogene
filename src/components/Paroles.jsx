@@ -11,8 +11,13 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
   const [pdfUrl, setPdfUrl] = useState(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [barVisible, setBarVisible] = useState(true)
+  const [zoom, setZoom] = useState(1)
   const barTimerRef = useRef(null)
   const touchStartY = useRef(null)
+
+  const zoomIn  = (e) => { e?.stopPropagation(); setZoom((z) => Math.min(3, parseFloat((z + 0.25).toFixed(2)))) }
+  const zoomOut = (e) => { e?.stopPropagation(); setZoom((z) => Math.max(0.5, parseFloat((z - 0.25).toFixed(2)))) }
+  const zoomReset = (e) => { e?.stopPropagation(); setZoom(1) }
 
   // Liste des PDFs disponibles (nouveau système pdfFiles[] + rétro-compat ancien lyricsFileId)
   const pdfFiles = song?.pdfFiles?.length > 0
@@ -140,8 +145,16 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
           )}
           {/* Titre + boutons */}
           <div className="flex justify-between items-center px-4 py-3">
-            <span className="text-white text-sm font-medium truncate max-w-[50%]">{song.name}</span>
-            <div className="flex gap-2">
+            <span className="text-white text-sm font-medium truncate max-w-[40%]">{song.name}</span>
+            <div className="flex gap-2 items-center">
+              {/* Zoom plein écran */}
+              <div className="flex items-center gap-1">
+                <button onClick={zoomOut} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/20 text-white text-lg font-bold active:scale-90">−</button>
+                {zoom !== 1 && (
+                  <button onClick={zoomReset} className="text-xs text-blue-300 px-1">{Math.round(zoom * 100)}%</button>
+                )}
+                <button onClick={zoomIn}  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/20 text-white text-lg font-bold active:scale-90">+</button>
+              </div>
               <button
                 onClick={(e) => { e.stopPropagation(); exitFullscreen() }}
                 className="text-white bg-white/20 px-3 py-1.5 rounded-lg text-sm"
@@ -161,10 +174,16 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
 
         {/* Contenu plein écran */}
         {showPdf ? (
-          <iframe src={pdfUrl} className="flex-1 w-full border-0" title={selectedPdf?.label || 'PDF'} />
+          <div className="flex-1 overflow-auto">
+            <iframe
+              src={pdfUrl}
+              style={{ width: `${zoom * 100}%`, height: `${Math.max(100, zoom * 100)}%`, minHeight: '100%', border: 0, display: 'block' }}
+              title={selectedPdf?.label || 'PDF'}
+            />
+          </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-6 pb-16">
-            <pre className="whitespace-pre-wrap text-base leading-relaxed font-sans">
+            <pre style={{ fontSize: `${zoom}rem` }} className="whitespace-pre-wrap leading-relaxed font-sans">
               {song.lyricsText || <span className="text-gray-400">Aucune parole enregistrée.</span>}
             </pre>
           </div>
@@ -198,6 +217,14 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
                 Enregistrer
               </button>
             )}
+            {/* Zoom */}
+            <div className="flex items-center gap-0.5">
+              <button onClick={zoomOut} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-base font-bold active:scale-90">−</button>
+              {zoom !== 1 && (
+                <button onClick={zoomReset} className="text-xs text-blue-500 px-1">{Math.round(zoom * 100)}%</button>
+              )}
+              <button onClick={zoomIn}  className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-base font-bold active:scale-90">+</button>
+            </div>
             <button
               onClick={enterFullscreen}
               className="text-gray-500 dark:text-gray-400 hover:text-gray-700 px-2 py-1 rounded text-lg"
@@ -227,9 +254,15 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
         )}
 
         {/* Contenu */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-auto p-4">
           {showPdf ? (
-            <iframe src={pdfUrl} className="w-full rounded border" style={{ height: '60dvh' }} title={selectedPdf?.label || 'PDF'} />
+            <div className="overflow-auto rounded border" style={{ height: '60dvh' }}>
+              <iframe
+                src={pdfUrl}
+                style={{ width: `${zoom * 100}%`, height: `${Math.max(100, zoom * 100)}%`, border: 0, display: 'block' }}
+                title={selectedPdf?.label || 'PDF'}
+              />
+            </div>
           ) : isPdfMode && !pdfUrl ? (
             <p className="text-sm text-gray-400 text-center py-8">Chargement…</p>
           ) : editing ? (
@@ -239,7 +272,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
               className="w-full h-96 text-sm font-mono p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 resize-none"
             />
           ) : (
-            <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">
+            <pre style={{ fontSize: `${zoom}rem` }} className="whitespace-pre-wrap leading-relaxed font-sans">
               {song.lyricsText || <span className="text-gray-400">Aucune parole enregistrée.</span>}
             </pre>
           )}
