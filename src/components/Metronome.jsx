@@ -68,17 +68,17 @@ export default function Metronome({ defaultBpm, compact = false }) {
   return (
     <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       {/* Barre de contrôle principale */}
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-1.5 px-2 py-2 w-full overflow-x-hidden">
         {/* Flash visuel */}
         <div
           ref={flashRef}
-          className={`w-4 h-4 rounded-full flex-shrink-0 opacity-0 transition-all duration-75 ${
+          className={`w-3.5 h-3.5 rounded-full flex-shrink-0 opacity-0 transition-all duration-75 ${
             beat === 0 ? 'bg-orange-500' : 'bg-blue-500'
           }`}
         />
 
         {/* BPM — tap pour éditer */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           {editing ? (
             <input
               type="number"
@@ -87,12 +87,12 @@ export default function Metronome({ defaultBpm, compact = false }) {
               onChange={(e) => setInputVal(e.target.value)}
               onBlur={() => { handleBpmChange(inputVal); setEditing(false) }}
               onKeyDown={(e) => { if (e.key === 'Enter') { handleBpmChange(inputVal); setEditing(false) } }}
-              className="w-14 text-center font-bold text-base border rounded px-1 dark:bg-gray-800 dark:border-gray-600"
+              className="w-12 text-center font-bold text-base border rounded px-1 dark:bg-gray-800 dark:border-gray-600"
             />
           ) : (
             <button
               onClick={() => { setInputVal(String(bpm)); setEditing(true) }}
-              className="w-14 text-center font-bold text-base tabular-nums hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 py-0.5"
+              className="w-12 text-center font-bold text-base tabular-nums hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 py-0.5"
             >
               {bpm}
             </button>
@@ -101,15 +101,15 @@ export default function Metronome({ defaultBpm, compact = false }) {
         </div>
 
         {/* − + */}
-        <button onClick={() => handleBpmChange(bpm - 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center hover:bg-gray-200 flex-shrink-0">−</button>
-        <button onClick={() => handleBpmChange(bpm + 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center hover:bg-gray-200 flex-shrink-0">+</button>
+        <button onClick={() => handleBpmChange(bpm - 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">−</button>
+        <button onClick={() => handleBpmChange(bpm + 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">+</button>
 
         {/* Slider */}
         <input
           type="range" min="20" max="240"
           value={bpm}
           onChange={(e) => handleBpmChange(e.target.value)}
-          className="flex-1 h-1.5 accent-blue-600"
+          className="flex-1 min-w-0 h-1.5 accent-blue-600"
         />
 
         {/* Toggles son / visuel */}
@@ -131,8 +131,8 @@ export default function Metronome({ defaultBpm, compact = false }) {
         {/* Start / Stop */}
         <button
           onClick={handleToggle}
-          className={`px-3 py-1.5 rounded-lg font-semibold text-white text-sm flex-shrink-0 transition-colors ${
-            isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'
+          className={`w-9 h-7 rounded-lg font-semibold text-white text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
+            isRunning ? 'bg-red-500' : 'bg-green-600'
           }`}
         >
           {isRunning ? '⏹' : '▶'}
