@@ -279,8 +279,10 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
           </button>
           <button
             onClick={player.toggleLoop}
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-colors
-              ${player.loop ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'bg-gray-100 dark:bg-gray-800'}`}
+            className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all
+              ${player.loop
+                ? 'bg-blue-600 text-white shadow-lg scale-110 ring-2 ring-blue-400 ring-offset-1'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}
           >🔁</button>
         </div>
 
