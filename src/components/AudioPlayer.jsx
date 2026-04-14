@@ -123,6 +123,25 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
   if (!song || !button) return null
 
+  // Fichier non disponible sur cet appareil (pas dans IndexedDB ni Firebase)
+  if (player.loadError) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center" onClick={onClose}>
+        <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-2xl md:rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start justify-between mb-3">
+            <h2 className="font-bold text-lg">{song.name}</h2>
+            <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4">×</button>
+          </div>
+          <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-700 rounded-xl p-4 text-sm text-orange-800 dark:text-orange-200">
+            <p className="font-semibold mb-1">⚠️ Fichier audio non disponible</p>
+            <p>Ce fichier n'est pas présent sur cet appareil et n'a pas encore été envoyé dans le cloud.</p>
+            <p className="mt-2 text-xs opacity-70">Ré-importez les fichiers MP3 depuis la Librairie sur le Mac pour les rendre disponibles partout.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const dur = player.duration || 1
   const curPct = (player.currentTime / dur) * 100
   const segStartPct = ((player.segmentStart || 0) / dur) * 100

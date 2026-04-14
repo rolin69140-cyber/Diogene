@@ -13,6 +13,7 @@ export default function useAudioPlayer() {
   const sourceNodeRef   = useRef(null)   // AudioBufferSourceNode en cours
   const gainNodeRef     = useRef(null)
   const storageUrlRef   = useRef(null)   // URL Firebase Storage (fallback)
+  const loadErrorRef    = useRef(false)  // true si le fichier n'est pas disponible
 
   // Position tracking pour le mode AudioBufferSourceNode
   const absStartRef  = useRef(0)   // audioCtx.currentTime au moment du start
@@ -31,6 +32,7 @@ export default function useAudioPlayer() {
   const segEndRef     = useRef(null)
 
   // ── État React (déclenchent les re-renders UI) ────────────────────────────
+  const [loadError,    setLoadError]    = useState(false)  // fichier indisponible
   const [isPlaying,    setIsPlaying]    = useState(false)
   const [duration,     setDuration]     = useState(0)
   const [currentTime,  setCurrentTime]  = useState(0)
@@ -176,10 +178,12 @@ export default function useAudioPlayer() {
     audio.pause()
     setIsPlaying(false)
     isPlayingRef.current = false
+    setLoadError(false)
+    loadErrorRef.current = false
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
 
     if (record) {
-      // Données locales → Blob URL
+      // ── Données locales → Blob URL ──────────────────────────────────────────
       const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
       const mimeType = record.type || 'audio/mpeg'
       const blob = new Blob([data], { type: mimeType })
@@ -209,25 +213,29 @@ export default function useAudioPlayer() {
       }
 
     } else if (storageUrl) {
-      // 2. Fallback Firebase Storage — URL directe (compatible iOS Safari)
-      // Ne pas passer par fetch+blob : iOS Safari bloque l'audio depuis un Blob URL distant
+      // ── Fallback Firebase Storage — URL directe ─────────────────────────────
+      // iOS Safari : ne pas faire fetch+blob, utiliser l'URL directement.
+      // iOS ne déclenche pas loadedmetadata avant play(), donc on n'attend pas.
+      audio.preload = 'metadata'
       audio.src = storageUrl
-      audio.load()
-
+      // On tente d'obtenir les métadonnées, mais on ne bloque pas si iOS refuse
       await new Promise((resolve) => {
+        const tid = setTimeout(resolve, 3000) // 3s max, iOS peut ne jamais déclencher
         audio.onloadedmetadata = () => {
+          clearTimeout(tid)
           const dur = audio.duration
-          setDuration(dur)
-          setSegmentEnd(dur);  segEndRef.current = dur
+          if (dur && isFinite(dur)) {
+            setDuration(dur)
+            setSegmentEnd(dur);  segEndRef.current = dur
+          }
           setSegmentStart(0);  segStartRef.current = 0
           setCurrentTime(0)
           resolve()
         }
-        audio.onerror = (e) => { console.warn('[AudioPlayer] storageUrl load error:', e); resolve() }
-        setTimeout(resolve, 10000) // sécurité timeout
+        audio.onerror = () => { clearTimeout(tid); resolve() }
       })
 
-      // Fetch ArrayBuffer en arrière-plan uniquement pour le pitch shift
+      // Fetch ArrayBuffer en arrière-plan uniquement pour le pitch shift (desktop)
       ;(async () => {
         try {
           const response = await fetch(storageUrl)
@@ -242,6 +250,9 @@ export default function useAudioPlayer() {
       })()
 
     } else {
+      // ── Aucune source disponible ────────────────────────────────────────────
+      setLoadError(true)
+      loadErrorRef.current = true
       return false
     }
 
@@ -284,16 +295,35 @@ export default function useAudioPlayer() {
     } else {
       // Mode HTMLAudioElement (direct)
       const audio = getAudio()
-      if (!audio.src) return
+      if (!audio.src || loadErrorRef.current) return
       audio.preservesPitch = true
       audio.mozPreservesPitch = true
       audio.webkitPreservesPitch = true
       audio.playbackRate = speedRef.current
-      audio.currentTime = startPos
+      // Sur iOS, currentTime ne peut être défini qu'après chargement — on ignore si durée inconnue
+      if (startPos > 0 && audio.duration && isFinite(audio.duration)) {
+        audio.currentTime = startPos
+      }
       try {
         await audio.play()
         setIsPlaying(true)
         isPlayingRef.current = true
+        // iOS charge les métadonnées au moment du play() — on récupère la durée ici
+        if (!segEndRef.current && audio.duration && isFinite(audio.duration)) {
+          const dur = audio.duration
+          setDuration(dur)
+          setSegmentEnd(dur); segEndRef.current = dur
+        }
+        // Écouter loadedmetadata si pas encore chargé (iOS)
+        if (!audio.duration || !isFinite(audio.duration)) {
+          audio.addEventListener('loadedmetadata', () => {
+            const dur = audio.duration
+            if (dur && isFinite(dur)) {
+              setDuration(dur)
+              setSegmentEnd(dur); segEndRef.current = dur
+            }
+          }, { once: true })
+        }
         startRaf()
       } catch (e) {
         console.warn('[AudioPlayer] play() failed:', e)
@@ -432,7 +462,7 @@ export default function useAudioPlayer() {
 
   return {
     isPlaying, duration, currentTime, loop, speed, transpose,
-    segmentStart, segmentEnd,
+    segmentStart, segmentEnd, loadError,
     loadFile, play, pause, seek, resetToSegmentStart,
     changeSpeed, changeTranspose, toggleLoop,
     setSegment, resetSegment,
