@@ -304,7 +304,7 @@ export default function Repetition() {
   const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
 
   return (
-    <div className="relative flex flex-col min-h-full">
+    <div className="relative flex flex-col min-h-full w-full overflow-x-hidden">
 
       {/* Fond tableau Diogène */}
       <div
@@ -375,7 +375,7 @@ export default function Repetition() {
                 {menuOpen === p && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
-                    <div className="absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-44">
+                    <div className="absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-44 right-0 left-auto">
                       <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                         onClick={() => { playPupitre(p, notes, activeSong?.bpm, settings.instrumentAttaque); setMenuOpen(null) }}>
                         🎵 Jouer la note
@@ -412,7 +412,7 @@ export default function Repetition() {
 
         {/* Filtre voix + bouton lecture */}
         {activeSong && availablePupitres.length > 0 && (
-          <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+          <div className="mt-4 flex items-center gap-2 flex-wrap justify-center w-full">
             {availablePupitres.map((p) => {
               const cfg = PUPITRES_CONFIG.find((c) => c.p === p)
               if (!cfg) return null
@@ -435,9 +435,9 @@ export default function Repetition() {
             {bestBtn && voiceFilter.length > 0 && (
               <button
                 onClick={() => openPlayer(activeSong.id, bestBtn.id)}
-                className="ml-2 flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform"
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full"
               >
-                ▶ <span className="text-xs opacity-90">{voiceFilter.join(' + ')}</span>
+                ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.join('+')}</span>
               </button>
             )}
           </div>
