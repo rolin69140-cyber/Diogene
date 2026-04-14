@@ -269,7 +269,7 @@ export default function Concert() {
   }
 
   return (
-    <div className={`relative flex flex-col min-h-full w-full overflow-x-hidden ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
+    <div className={`relative flex flex-col w-full overflow-x-hidden ${settings.modeScene ? 'bg-gray-950 text-white' : ''}`}>
 
       {/* Fond décoratif (perso prioritaire sur défaut) */}
       <div
@@ -279,6 +279,9 @@ export default function Concert() {
 
       {/* Contenu au-dessus du fond */}
       <div className="relative z-10 flex flex-col min-h-full">
+
+      {/* Zone de commandes — sticky en haut lors du scroll */}
+      <div className="sticky top-0 z-20 bg-white dark:bg-gray-900">
 
       {/* Métronome */}
       <ErrorBoundary>
@@ -406,6 +409,8 @@ export default function Concert() {
           </div>
         )}
       </div>
+
+      </div>{/* fin zone sticky */}
 
       {/* ── Texte de scène (plein écran) ── */}
       {showCueText && currentSong?.cueText ? (
