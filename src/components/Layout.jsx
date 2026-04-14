@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import useStore from '../store/index'
 import useFirebaseSync from '../hooks/useFirebaseSync'
@@ -14,13 +15,16 @@ const NAV_ITEMS = [
 export default function Layout({ children }) {
   const modeScene = useStore((s) => s.settings.modeScene)
   const theme     = useStore((s) => s.settings.theme)
-  const { syncReady, firebaseEnabled, migrating, migrateProgress } = useFirebaseSync()
+  const { syncReady, firebaseEnabled, migrating, migrateProgress, appConfig } = useFirebaseSync()
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState(false)
+  const [bypassMaintenance, setBypassMaintenance] = useState(false)
 
   const darkClass =
     theme === 'sombre' ? 'dark' :
     theme === 'clair'  ? ''     : ''
 
-  // Écran de chargement / migration (seulement si Firebase est configuré)
+  // Écran de chargement / migration
   if (firebaseEnabled && (!syncReady || migrating)) {
     return (
       <div className={`flex flex-col min-h-dvh items-center justify-center bg-white dark:bg-gray-950 ${darkClass}`}>
@@ -38,6 +42,45 @@ export default function Layout({ children }) {
         ) : (
           <p className="text-xs text-gray-400">Synchronisation…</p>
         )}
+      </div>
+    )
+  }
+
+  // Écran de maintenance
+  if (appConfig?.maintenanceMode && !bypassMaintenance) {
+    const handlePin = () => {
+      if (pinInput === appConfig.adminPin) {
+        setBypassMaintenance(true)
+        setPinError(false)
+      } else {
+        setPinError(true)
+        setPinInput('')
+      }
+    }
+    return (
+      <div className={`flex flex-col min-h-dvh items-center justify-center bg-gray-950 text-white px-6 ${darkClass}`}>
+        <img src="/logo.jpeg" alt="Diogène" className="w-24 h-24 object-contain mb-6 opacity-60" />
+        <h1 className="text-2xl font-bold mb-2">Maintenance</h1>
+        <p className="text-gray-400 text-sm text-center mb-8 max-w-xs">
+          {appConfig.message || "L'application est temporairement indisponible. Merci de réessayer plus tard."}
+        </p>
+        {/* Accès admin discret */}
+        <div className="flex flex-col items-center gap-2 mt-4">
+          <input
+            type="password"
+            placeholder="Code administrateur"
+            value={pinInput}
+            onChange={(e) => { setPinInput(e.target.value); setPinError(false) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handlePin() }}
+            className={`w-48 text-center px-4 py-2 rounded-xl bg-gray-800 border text-white text-sm
+              ${pinError ? 'border-red-500' : 'border-gray-700'}`}
+          />
+          {pinError && <p className="text-red-400 text-xs">Code incorrect</p>}
+          <button
+            onClick={handlePin}
+            className="px-6 py-2 bg-blue-600 rounded-xl text-sm font-medium"
+          >Accéder</button>
+        </div>
       </div>
     )
   }

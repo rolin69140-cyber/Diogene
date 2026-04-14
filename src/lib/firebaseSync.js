@@ -8,12 +8,33 @@
 
 import {
   collection, doc, onSnapshot,
-  setDoc, deleteDoc, writeBatch,
+  setDoc, deleteDoc, writeBatch, getDoc,
 } from 'firebase/firestore'
 import {
   ref, uploadBytes, getDownloadURL, deleteObject,
 } from 'firebase/storage'
 import { db, storage, FIREBASE_ENABLED } from './firebase'
+
+// ─── Config app (maintenance) ─────────────────────────────────────────────────
+
+/**
+ * Écoute en temps réel le document config/app.
+ * Structure : { maintenanceMode: bool, adminPin: string, message: string }
+ */
+export function subscribeAppConfig(callback) {
+  if (!FIREBASE_ENABLED || !db) return () => {}
+  return onSnapshot(doc(db, 'config', 'app'), (snap) => {
+    callback(snap.exists() ? snap.data() : { maintenanceMode: false })
+  })
+}
+
+/**
+ * Met à jour la config app (admin uniquement).
+ */
+export async function saveAppConfig(data) {
+  if (!FIREBASE_ENABLED || !db) return
+  await setDoc(doc(db, 'config', 'app'), data, { merge: true })
+}
 
 // ─── Firestore : bibliothèque ─────────────────────────────────────────────────
 
