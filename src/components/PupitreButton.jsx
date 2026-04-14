@@ -19,7 +19,8 @@ export default function PupitreButton({ pupitre, song, onOpenPlayer, onOpenLyric
     size === 'grand'      ? 'w-20 h-20 text-2xl' :
                             'w-16 h-16 text-xl'
 
-  const hasAudio = song?.audioButtons?.some((b) => b.pupitres?.includes(pupitre))
+  // bouton avec pupitres:[] = tous pupitres → compte aussi
+  const hasAudio = song?.audioButtons?.some((b) => !b.pupitres?.length || b.pupitres.includes(pupitre))
   const hasMenu = song && (hasAudio || song.lyricsText || song.lyricsFileId)
 
   const handlePlayNote = () => {

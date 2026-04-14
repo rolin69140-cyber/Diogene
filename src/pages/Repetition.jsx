@@ -271,8 +271,8 @@ export default function Repetition() {
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   const [voiceFilter, setVoiceFilter] = useState(['B', 'A', 'S', 'T'])
 
-  const availablePupitres = activeSong
-    ? Array.from(new Set((activeSong.audioButtons || []).flatMap((b) => b.pupitres || [])))
+  const availablePupitres = activeSong?.audioButtons?.length
+    ? Array.from(new Set((activeSong.audioButtons).flatMap((b) => b.pupitres?.length > 0 ? b.pupitres : ['B', 'A', 'S', 'T'])))
     : []
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>

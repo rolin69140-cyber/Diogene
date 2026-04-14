@@ -155,7 +155,6 @@ export const AUDIO_PREFIXES = [
   // ── Pupitres seuls — pluriel ET singulier (FR + EN) ──────────────────────
   { prefix: 'Basses',   button: 'B', pupitres: ['B'] },
   { prefix: 'Basse',    button: 'B', pupitres: ['B'] },
-  { prefix: 'Basses',   button: 'B', pupitres: ['B'] },
   { prefix: 'Bass',     button: 'B', pupitres: ['B'] },
   { prefix: 'Altis',    button: 'A', pupitres: ['A'] },
   { prefix: 'Altos',    button: 'A', pupitres: ['A'] },

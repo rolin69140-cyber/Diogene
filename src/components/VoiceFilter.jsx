@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { PUPITRES, PUPITRE_COLORS } from '../store/index'
 
+// pupitres effectifs : [] = tous les pupitres (bouton non typé)
+const ep = (btn) => btn.pupitres?.length > 0 ? btn.pupitres : ['B', 'A', 'S', 'T']
+
 // Trouve le meilleur fichier audio pour une sélection de pupitres
 export function findBestAudioButton(audioButtons, selectedPupitres) {
   if (!audioButtons?.length || !selectedPupitres?.length) return null
@@ -8,7 +11,7 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
 
   // 1. Correspondance exacte
   const exact = audioButtons.find(
-    (b) => b.pupitres?.length === sel.size && b.pupitres.every((p) => sel.has(p))
+    (b) => { const p = ep(b); return p.length === sel.size && p.every((x) => sel.has(x)) }
   )
   if (exact) return exact
 
@@ -16,10 +19,10 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
   let best = null
   let bestScore = -Infinity
   for (const btn of audioButtons) {
-    const overlap = (btn.pupitres || []).filter((p) => sel.has(p)).length
+    const p = ep(btn)
+    const overlap = p.filter((x) => sel.has(x)).length
     if (overlap === 0) continue
-    const extra = (btn.pupitres || []).length - overlap
-    const score = overlap * 10 - extra
+    const score = overlap * 10 - (p.length - overlap)
     if (score > bestScore) { bestScore = score; best = btn }
   }
   return best
@@ -27,7 +30,7 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
 
 export default function VoiceFilter({ song, onPlay, myPupitre }) {
   const available = new Set(
-    (song?.audioButtons || []).flatMap((b) => b.pupitres || [])
+    (song?.audioButtons || []).flatMap((b) => ep(b))
   )
 
   // Par défaut : toutes les voix disponibles cochées sauf la mienne
