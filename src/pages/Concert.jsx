@@ -225,8 +225,9 @@ export default function Concert() {
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
+  const PUPITRE_ORDER = ['B', 'A', 'S', 'T']
   const availablePupitres = currentSong?.audioButtons?.length
-    ? Array.from(new Set((currentSong.audioButtons).flatMap((b) => b.pupitres?.length > 0 ? b.pupitres : ['B', 'A', 'S', 'T'])))
+    ? PUPITRE_ORDER.filter((p) => (currentSong.audioButtons).some((b) => b.pupitres?.length > 0 ? b.pupitres.includes(p) : true))
     : []
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>

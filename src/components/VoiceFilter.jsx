@@ -27,9 +27,11 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
   return best || audioButtons.find((b) => !b.pupitres?.length) || null
 }
 
+const PUPITRE_ORDER = ['B', 'A', 'S', 'T']
+
 export default function VoiceFilter({ song, onPlay, myPupitre }) {
   const available = new Set(
-    (song?.audioButtons || []).flatMap((b) => ep(b))
+    (song?.audioButtons || []).flatMap((b) => b.pupitres?.length > 0 ? b.pupitres : ['B', 'A', 'S', 'T'])
   )
 
   // Par défaut : toutes les voix disponibles cochées sauf la mienne
@@ -50,7 +52,7 @@ export default function VoiceFilter({ song, onPlay, myPupitre }) {
   )
 
   const bestBtn = findBestAudioButton(song.audioButtons, selected)
-  const availableList = PUPITRES.filter((p) => available.has(p))
+  const availableList = PUPITRE_ORDER.filter((p) => available.has(p))
 
   // Label lisible de la sélection : "B + S" ou "Tous" ou "Aucun"
   const selectionLabel = selected.length === 0
