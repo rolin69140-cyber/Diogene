@@ -17,6 +17,11 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  overflow-x: hidden;
+}
+
+#root {
+  overflow-x: hidden;
 }
 
 #root {
