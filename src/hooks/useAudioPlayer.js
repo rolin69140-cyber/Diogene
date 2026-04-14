@@ -170,61 +170,79 @@ export default function useAudioPlayer() {
     storageUrlRef.current = storageUrl
 
     // 1. Essai IndexedDB local
-    let data = null
-    let mimeType = 'audio/mpeg'
     const record = await getAudioFile(fileId)
-    if (record) {
-      data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-      mimeType = record.type || 'audio/mpeg'
-    } else if (storageUrl) {
-      // 2. Fallback Firebase Storage
-      try {
-        const response = await fetch(storageUrl)
-        if (response.ok) {
-          data = await response.arrayBuffer()
-          mimeType = response.headers.get('content-type') || 'audio/mpeg'
-        }
-      } catch (e) {
-        console.warn('[AudioPlayer] fetch storageUrl failed:', e)
-      }
-    }
-
-    if (!data) return false
 
     const audio = getAudio()
     audio.pause()
     setIsPlaying(false)
     isPlayingRef.current = false
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
 
-    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+    if (record) {
+      // Données locales → Blob URL
+      const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+      const mimeType = record.type || 'audio/mpeg'
+      const blob = new Blob([data], { type: mimeType })
+      blobUrlRef.current = URL.createObjectURL(blob)
+      audio.src = blobUrlRef.current
+      audio.load()
 
-    // Blob URL pour HTMLAudioElement
-    const blob = new Blob([data], { type: mimeType })
-    blobUrlRef.current = URL.createObjectURL(blob)
-    audio.src = blobUrlRef.current
-    audio.load()
+      await new Promise((resolve) => {
+        audio.onloadedmetadata = () => {
+          const dur = audio.duration
+          setDuration(dur)
+          setSegmentEnd(dur);  segEndRef.current = dur
+          setSegmentStart(0);  segStartRef.current = 0
+          setCurrentTime(0)
+          resolve()
+        }
+        audio.onerror = resolve
+      })
 
-    // Métadonnées via HTMLAudioElement
-    await new Promise((resolve) => {
-      audio.onloadedmetadata = () => {
-        const dur = audio.duration
-        setDuration(dur)
-        setSegmentEnd(dur);  segEndRef.current = dur
-        setSegmentStart(0);  segStartRef.current = 0
-        setCurrentTime(0)
-        resolve()
+      // Décodage AudioBuffer en arrière-plan (pitch shift)
+      try {
+        const ctx = await getOrCreateCtx()
+        audioBufferRef.current = await ctx.decodeAudioData(data.slice(0))
+      } catch (e) {
+        console.warn('[AudioPlayer] decodeAudioData failed — pitch shift unavailable', e)
+        audioBufferRef.current = null
       }
-      audio.onerror = resolve
-    })
 
-    // Décodage AudioBuffer en arrière-plan (pour pitch shift)
-    try {
-      const ctx = await getOrCreateCtx()
-      // slice() pour ne pas transférer l'ArrayBuffer original
-      audioBufferRef.current = await ctx.decodeAudioData(data.slice(0))
-    } catch (e) {
-      console.warn('[AudioPlayer] decodeAudioData failed — pitch shift unavailable', e)
-      audioBufferRef.current = null
+    } else if (storageUrl) {
+      // 2. Fallback Firebase Storage — URL directe (compatible iOS Safari)
+      // Ne pas passer par fetch+blob : iOS Safari bloque l'audio depuis un Blob URL distant
+      audio.src = storageUrl
+      audio.load()
+
+      await new Promise((resolve) => {
+        audio.onloadedmetadata = () => {
+          const dur = audio.duration
+          setDuration(dur)
+          setSegmentEnd(dur);  segEndRef.current = dur
+          setSegmentStart(0);  segStartRef.current = 0
+          setCurrentTime(0)
+          resolve()
+        }
+        audio.onerror = (e) => { console.warn('[AudioPlayer] storageUrl load error:', e); resolve() }
+        setTimeout(resolve, 10000) // sécurité timeout
+      })
+
+      // Fetch ArrayBuffer en arrière-plan uniquement pour le pitch shift
+      ;(async () => {
+        try {
+          const response = await fetch(storageUrl)
+          if (response.ok && loadedFileIdRef.current === fileId) {
+            const buf = await response.arrayBuffer()
+            const ctx = await getOrCreateCtx()
+            audioBufferRef.current = await ctx.decodeAudioData(buf.slice(0))
+          }
+        } catch (e) {
+          console.warn('[AudioPlayer] background fetch for pitch shift failed:', e)
+        }
+      })()
+
+    } else {
+      return false
     }
 
     loadedFileIdRef.current = fileId

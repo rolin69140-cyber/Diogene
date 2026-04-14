@@ -48,20 +48,17 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
     if (!button?.fileId) return
     let cancelled = false
     async function drawWaveform() {
-      // Essai IndexedDB, fallback Firebase Storage
+      // Essai IndexedDB uniquement (pas de fetch pour la waveform sur iOS)
       let arrayBuf = null
       const record = await getAudioFile(button.fileId)
       if (record) {
         arrayBuf = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-      } else if (button.storageUrl) {
-        try {
-          const resp = await fetch(button.storageUrl)
-          if (resp.ok) arrayBuf = await resp.arrayBuffer()
-        } catch {}
       }
+      // Si pas de données locales (ex: iPhone, fichier en cloud uniquement) → pas de waveform, pas grave
       if (!arrayBuf || cancelled) return
+      const audioCtx = new AudioContext()
       let decoded
-      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { return }
+      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { audioCtx.close(); return }
       audioCtx.close()
       if (cancelled) return
       const canvas = canvasRef.current
