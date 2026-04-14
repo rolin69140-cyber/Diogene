@@ -12,11 +12,19 @@ export default function Metronome({ defaultBpm, compact = false }) {
   const { isRunning, beat, start, stop, updateBpm } = useMetronome()
   const flashRef = useRef(null)
 
-  // Sync BPM si le chant change
+  // BPM mémorisé pour ce chant — ne se réinitialise pas si on arrête/relance
+  // Ne se met à jour que si le chant change (defaultBpm change) ET le métronome est arrêté
+  const lockedBpmRef = useRef(defaultBpm || 80) // BPM verrouillé dès le premier lancement
+  const hasStartedRef = useRef(false)            // a-t-on déjà lancé pour ce chant ?
+
   useEffect(() => {
-    if (defaultBpm && !isRunning) {
+    // Nouveau chant → réinitialiser
+    if (defaultBpm) {
       setBpm(defaultBpm)
       setInputVal(String(defaultBpm))
+      lockedBpmRef.current = defaultBpm
+      hasStartedRef.current = false
+      if (isRunning) stop()
     }
   }, [defaultBpm])
 
@@ -24,8 +32,11 @@ export default function Metronome({ defaultBpm, compact = false }) {
     if (isRunning) {
       stop()
     } else {
+      // Relancer avec le BPM tel qu'il était au moment du dernier arrêt
+      const bpmToUse = hasStartedRef.current ? bpm : (defaultBpm || bpm)
+      hasStartedRef.current = true
       await start({
-        bpm,
+        bpm: bpmToUse,
         sound: settings.metronomeSound,
         sonore: settings.metronomeSonore,
         visuel: settings.metronomeVisuel,
@@ -33,7 +44,6 @@ export default function Metronome({ defaultBpm, compact = false }) {
     }
   }
 
-  // Redémarre si les paramètres changent pendant la lecture
   const handleToggleSonore = async () => {
     const newVal = !settings.metronomeSonore
     updateSettings({ metronomeSonore: newVal })
@@ -55,89 +65,95 @@ export default function Metronome({ defaultBpm, compact = false }) {
     if (isRunning) updateBpm(n)
   }
 
-  // Flash visuel sur le beat
+  // Flash plein écran sur le beat
   useEffect(() => {
     if (!settings.metronomeVisuel || !isRunning || !flashRef.current) return
-    flashRef.current.classList.add('opacity-100', 'scale-125')
+    const isAccent = beat === 0
+    flashRef.current.style.opacity = isAccent ? '0.18' : '0.10'
+    flashRef.current.style.backgroundColor = isAccent ? '#f97316' : '#3b82f6' // orange / bleu
     const t = setTimeout(() => {
-      flashRef.current?.classList.remove('opacity-100', 'scale-125')
-    }, 80)
+      if (flashRef.current) flashRef.current.style.opacity = '0'
+    }, isAccent ? 120 : 80)
     return () => clearTimeout(t)
   }, [beat, isRunning, settings.metronomeVisuel])
 
   return (
-    <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-      {/* Barre de contrôle principale */}
-      <div className="flex items-center gap-1.5 px-2 py-2 w-full overflow-x-hidden">
-        {/* Flash visuel */}
+    <>
+      {/* Flash plein écran — positionné en fixed derrière tout */}
+      {settings.metronomeVisuel && (
         <div
           ref={flashRef}
-          className={`w-3.5 h-3.5 rounded-full flex-shrink-0 opacity-0 transition-all duration-75 ${
-            beat === 0 ? 'bg-orange-500' : 'bg-blue-500'
-          }`}
+          style={{ opacity: 0, transition: 'opacity 60ms ease-out', backgroundColor: '#3b82f6' }}
+          className="fixed inset-0 pointer-events-none z-30"
         />
+      )}
 
-        {/* BPM — tap pour éditer */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          {editing ? (
-            <input
-              type="number"
-              value={inputVal}
-              autoFocus
-              onChange={(e) => setInputVal(e.target.value)}
-              onBlur={() => { handleBpmChange(inputVal); setEditing(false) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') { handleBpmChange(inputVal); setEditing(false) } }}
-              className="w-12 text-center font-bold text-base border rounded px-1 dark:bg-gray-800 dark:border-gray-600"
-            />
-          ) : (
-            <button
-              onClick={() => { setInputVal(String(bpm)); setEditing(true) }}
-              className="w-12 text-center font-bold text-base tabular-nums hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 py-0.5"
-            >
-              {bpm}
-            </button>
-          )}
-          <span className="text-xs text-gray-400">BPM</span>
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        {/* Barre de contrôle principale */}
+        <div className="flex items-center gap-1.5 px-2 py-2 w-full overflow-x-hidden">
+
+          {/* BPM — tap pour éditer */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {editing ? (
+              <input
+                type="number"
+                value={inputVal}
+                autoFocus
+                onChange={(e) => setInputVal(e.target.value)}
+                onBlur={() => { handleBpmChange(inputVal); setEditing(false) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { handleBpmChange(inputVal); setEditing(false) } }}
+                className="w-12 text-center font-bold text-base border rounded px-1 dark:bg-gray-800 dark:border-gray-600"
+              />
+            ) : (
+              <button
+                onClick={() => { setInputVal(String(bpm)); setEditing(true) }}
+                className="w-12 text-center font-bold text-base tabular-nums hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 py-0.5"
+              >
+                {bpm}
+              </button>
+            )}
+            <span className="text-xs text-gray-400">BPM</span>
+          </div>
+
+          {/* − + */}
+          <button onClick={() => handleBpmChange(bpm - 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">−</button>
+          <button onClick={() => handleBpmChange(bpm + 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">+</button>
+
+          {/* Slider */}
+          <input
+            type="range" min="20" max="240"
+            value={bpm}
+            onChange={(e) => handleBpmChange(e.target.value)}
+            className="flex-1 min-w-0 h-1.5 accent-blue-600"
+          />
+
+          {/* Toggles son / visuel */}
+          <button
+            onClick={handleToggleSonore}
+            title="Son"
+            className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
+              settings.metronomeSonore ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+            }`}
+          >🔊</button>
+          <button
+            onClick={handleToggleVisuel}
+            title="Flash visuel"
+            className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
+              settings.metronomeVisuel ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+            }`}
+          >👁</button>
+
+          {/* Start / Stop */}
+          <button
+            onClick={handleToggle}
+            className={`w-9 h-7 rounded-lg font-semibold text-white text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
+              isRunning ? 'bg-red-500' : 'bg-green-600'
+            }`}
+          >
+            {isRunning ? '⏹' : '▶'}
+          </button>
         </div>
-
-        {/* − + */}
-        <button onClick={() => handleBpmChange(bpm - 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">−</button>
-        <button onClick={() => handleBpmChange(bpm + 1)} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold flex items-center justify-center flex-shrink-0">+</button>
-
-        {/* Slider */}
-        <input
-          type="range" min="20" max="240"
-          value={bpm}
-          onChange={(e) => handleBpmChange(e.target.value)}
-          className="flex-1 min-w-0 h-1.5 accent-blue-600"
-        />
-
-        {/* Toggles son / visuel */}
-        <button
-          onClick={handleToggleSonore}
-          title="Son"
-          className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
-            settings.metronomeSonore ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-          }`}
-        >🔊</button>
-        <button
-          onClick={handleToggleVisuel}
-          title="Flash visuel"
-          className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
-            settings.metronomeVisuel ? 'bg-blue-100 dark:bg-blue-900 text-blue-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-          }`}
-        >👁</button>
-
-        {/* Start / Stop */}
-        <button
-          onClick={handleToggle}
-          className={`w-9 h-7 rounded-lg font-semibold text-white text-sm flex items-center justify-center flex-shrink-0 transition-colors ${
-            isRunning ? 'bg-red-500' : 'bg-green-600'
-          }`}
-        >
-          {isRunning ? '⏹' : '▶'}
-        </button>
       </div>
-    </div>
+    </>
   )
 }
