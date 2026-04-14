@@ -282,23 +282,22 @@ export default function Repetition() {
   const findBestButton = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return null
     const sel = new Set(selected)
-    // pupitres effectifs : [] → ['B','A','S','T'] (bouton non typé = tous les pupitres)
-    const ep = (btn) => btn.pupitres?.length > 0 ? btn.pupitres : ['B', 'A', 'S', 'T']
-    // Exact match
-    const exact = activeSong.audioButtons.find(
-      (b) => { const p = ep(b); return p.length === sel.size && p.every((x) => sel.has(x)) }
+    // 1. Exact match avec pupitres explicites (prioritaire)
+    const exactExplicit = activeSong.audioButtons.find(
+      (b) => b.pupitres?.length > 0 && b.pupitres.length === sel.size && b.pupitres.every((x) => sel.has(x))
     )
-    if (exact) return exact
-    // Best score
+    if (exactExplicit) return exactExplicit
+    // 2. Meilleur score sur pupitres explicites
     let best = null, bestScore = -Infinity
     for (const btn of activeSong.audioButtons) {
-      const p = ep(btn)
-      const overlap = p.filter((x) => sel.has(x)).length
+      if (!btn.pupitres?.length) continue
+      const overlap = btn.pupitres.filter((x) => sel.has(x)).length
       if (!overlap) continue
-      const score = overlap * 10 - (p.length - overlap)
+      const score = overlap * 10 - (btn.pupitres.length - overlap)
       if (score > bestScore) { bestScore = score; best = btn }
     }
-    return best
+    // 3. Bouton sans pupitres en dernier recours
+    return best || activeSong.audioButtons.find((b) => !b.pupitres?.length) || null
   }
 
   const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
