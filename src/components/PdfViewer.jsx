@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
-// Worker PDF.js — fichier statique dans /public (fonctionne sur iOS Safari PWA)
 import * as pdfjsLib from 'pdfjs-dist'
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+// Vite copie le worker comme asset statique et retourne son URL hashée
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 export default function PdfViewer({ url, zoom = 1, className = '' }) {
   const containerRef = useRef(null)
