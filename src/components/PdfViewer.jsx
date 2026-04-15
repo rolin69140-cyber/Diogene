@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
-// Worker PDF.js — pointé vers le fichier dans node_modules via Vite
+// Worker PDF.js — fichier statique dans /public (fonctionne sur iOS Safari PWA)
 import * as pdfjsLib from 'pdfjs-dist'
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).href
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
 export default function PdfViewer({ url, zoom = 1, className = '' }) {
   const containerRef = useRef(null)
