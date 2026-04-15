@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react'
+import * as Tone from 'tone'
 
 // Notes par défaut par pupitre
 const DEFAULT_NOTES = {
@@ -70,24 +71,24 @@ function playFreq(audioCtx, compressor, freq, volume = 0.8, duration = 1.5) {
   osc.stop(now + duration)
 }
 
-// Contexte audio partagé + compresseur maître (évite le clipping)
-let sharedCtx = null
+// Compresseur maître partagé (recréé si le contexte Tone change)
 let sharedCompressor = null
+let compressorCtx = null
 function getCtx() {
-  if (!sharedCtx || sharedCtx.state === 'closed') {
-    sharedCtx = new AudioContext()
-    sharedCompressor = sharedCtx.createDynamicsCompressor()
+  const ctx = Tone.getContext().rawContext
+  if (ctx.state === 'suspended') ctx.resume()
+  // Recrée le compresseur si le contexte a changé
+  if (!sharedCompressor || compressorCtx !== ctx) {
+    sharedCompressor = ctx.createDynamicsCompressor()
     sharedCompressor.threshold.value = -18
     sharedCompressor.knee.value      = 10
     sharedCompressor.ratio.value     = 4
     sharedCompressor.attack.value    = 0.003
     sharedCompressor.release.value   = 0.15
-    sharedCompressor.connect(sharedCtx.destination)
+    sharedCompressor.connect(ctx.destination)
+    compressorCtx = ctx
   }
-  if (sharedCtx.state === 'suspended') {
-    sharedCtx.resume()
-  }
-  return { ctx: sharedCtx, compressor: sharedCompressor }
+  return { ctx, compressor: sharedCompressor }
 }
 
 export default function usePianoSynth() {
