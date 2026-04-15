@@ -62,8 +62,9 @@ export default function Clavier() {
   const [pressedKeys, setPressedKeys] = useState(new Set())
   const instrument = settings.instrumentClavier || 'piano'
 
-  const playNote = useCallback(async (note) => {
-    await Tone.start()
+  const playNote = useCallback((note) => {
+    // Tone.start() sans await — iOS exige que le son soit déclenché synchroniquement dans le geste
+    Tone.start()
     const synth = getSynth(instrument)
     synth.volume.value = Tone.gainToDb(settings.volume)
     synth.triggerAttackRelease(note, '4n')
