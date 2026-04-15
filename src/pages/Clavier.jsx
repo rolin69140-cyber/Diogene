@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
-import * as Tone from 'tone'
 import useStore from '../store/index'
+import { playNote as synthPlayNote, startHoldNote } from '../lib/attackSynth'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe']
 
@@ -14,47 +14,6 @@ const NOTE_FR = {
   'G#': 'Sol#', 'A': 'La', 'A#': 'La#', 'B': 'Si'
 }
 
-let globalSynth = null
-let currentInstrument = null
-
-function getSynth(instrument) {
-  if (globalSynth && currentInstrument === instrument) return globalSynth
-  if (globalSynth) globalSynth.dispose()
-  currentInstrument = instrument
-  switch (instrument) {
-    case 'orgue':
-      globalSynth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'square' },
-        envelope: { attack: 0.05, decay: 0.1, sustain: 0.9, release: 1.5 }
-      }).toDestination()
-      break
-    case 'choeur':
-      globalSynth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.2, decay: 0.1, sustain: 0.8, release: 1.2 }
-      }).toDestination()
-      break
-    case 'cordes':
-      globalSynth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.3, decay: 0.2, sustain: 0.7, release: 1.5 }
-      }).toDestination()
-      break
-    case 'harpe':
-      globalSynth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.01, decay: 0.5, sustain: 0, release: 1.5 }
-      }).toDestination()
-      break
-    default: // piano
-      globalSynth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.02, decay: 0.3, sustain: 0.2, release: 1.0 }
-      }).toDestination()
-  }
-  return globalSynth
-}
-
 export default function Clavier() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -63,11 +22,7 @@ export default function Clavier() {
   const instrument = settings.instrumentClavier || 'piano'
 
   const playNote = useCallback((note) => {
-    // Tone.start() sans await — iOS exige que le son soit déclenché synchroniquement dans le geste
-    Tone.start()
-    const synth = getSynth(instrument)
-    synth.volume.value = Tone.gainToDb(settings.volume)
-    synth.triggerAttackRelease(note, '4n')
+    synthPlayNote(note, instrument, settings.volume ?? 0.8)
     setPressedKeys((prev) => { const s = new Set(prev); s.add(note); return s })
     setTimeout(() => setPressedKeys((prev) => { const s = new Set(prev); s.delete(note); return s }), 200)
   }, [instrument, settings.volume])
