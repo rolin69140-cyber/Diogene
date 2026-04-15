@@ -61,6 +61,17 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
 
   const attachPinch = usePinchZoom(zoom, setZoom)
 
+  // Liste des PDFs disponibles
+  const pdfFiles = song?.pdfFiles?.length > 0
+    ? song.pdfFiles
+    : (song?.lyricsFileId ? [{ id: song.lyricsFileId, fileId: song.lyricsFileId, name: 'Paroles', label: 'Paroles' }] : [])
+
+  const [selectedPdfId, setSelectedPdfId] = useState(() => initialPdfId || pdfFiles[0]?.id || null)
+  const selectedPdf = pdfFiles.find((p) => p.id === selectedPdfId)
+
+  // Reset zoom quand on change de PDF
+  useEffect(() => { setZoom(1) }, [selectedPdfId])
+
   // Attache pinch au conteneur scroll (modale)
   useEffect(() => {
     if (!scrollRef.current) return
@@ -72,17 +83,6 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
     if (!fullscreen || !fsScrollRef.current) return
     return attachPinch(fsScrollRef.current)
   }, [attachPinch, fullscreen])
-
-  // Reset zoom quand on change de PDF
-  useEffect(() => { setZoom(1) }, [selectedPdfId ?? null])
-
-  // Liste des PDFs disponibles
-  const pdfFiles = song?.pdfFiles?.length > 0
-    ? song.pdfFiles
-    : (song?.lyricsFileId ? [{ id: song.lyricsFileId, fileId: song.lyricsFileId, name: 'Paroles', label: 'Paroles' }] : [])
-
-  const [selectedPdfId, setSelectedPdfId] = useState(() => initialPdfId || pdfFiles[0]?.id || null)
-  const selectedPdf = pdfFiles.find((p) => p.id === selectedPdfId)
 
   const isTextMode = !!(song?.lyricsText && pdfFiles.length === 0)
   const isPdfMode  = pdfFiles.length > 0
