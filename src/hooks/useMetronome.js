@@ -1,10 +1,12 @@
 import { useRef, useState, useCallback } from 'react'
-import * as Tone from 'tone'
 
+let sharedCtx = null
 function getCtx() {
-  const ctx = Tone.getContext().rawContext
-  if (ctx.state === 'suspended') ctx.resume()
-  return ctx
+  if (!sharedCtx || sharedCtx.state === 'closed') {
+    sharedCtx = new AudioContext()
+  }
+  if (sharedCtx.state === 'suspended') sharedCtx.resume()
+  return sharedCtx
 }
 
 function makeClick(ctx, isAccent, sound) {

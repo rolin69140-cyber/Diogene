@@ -3,7 +3,6 @@ import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import useLibrary from '../hooks/useLibrary'
 import Metronome from '../components/Metronome'
-import * as Tone from 'tone'
 import ErrorBoundary from '../components/ErrorBoundary'
 import NotesModal from '../components/NotesModal'
 import DirectorNotesModal from '../components/DirectorNotesModal'
@@ -18,19 +17,18 @@ const PUPITRES_CONFIG = [
   { p: 'T', label: 'Ténors',   color: '#3B6D11' },
 ]
 
-// Réverb partagé
+// AudioContext + réverb partagés
+let audioCtx = null
 let reverbNode = null
 
 function getAudioCtx() {
-  // Utilise le contexte Tone.js partagé (évite les conflits iOS avec 2 AudioContexts)
-  const ctx = Tone.getContext().rawContext
-  if (ctx.state === 'suspended') ctx.resume()
-  return ctx
+  if (!audioCtx || audioCtx.state === 'closed') { audioCtx = new AudioContext(); reverbNode = null }
+  if (audioCtx.state === 'suspended') audioCtx.resume()
+  return audioCtx
 }
 
 function getReverb() {
   const ctx = getAudioCtx()
-  if (reverbNode && reverbNode.context !== ctx) reverbNode = null
   if (reverbNode) return reverbNode
   // Génère une réponse impulsionnelle synthétique (bruit blanc décroissant)
   const sampleRate = ctx.sampleRate
@@ -356,7 +354,6 @@ export default function Repetition() {
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
-                    Tone.start() // déverrouille l'AudioContext sur iOS (dans le geste)
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')

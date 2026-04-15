@@ -1,6 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { getAudioFile } from '../store/index'
-import * as Tone from 'tone'
 
 export default function useWaveform(canvasRef) {
   const bufferDataRef = useRef(null) // Float32Array des peaks
@@ -25,8 +24,9 @@ export default function useWaveform(canvasRef) {
     if (loadedFileIdRef.current === fileId && bufferDataRef.current) return
     const record = await getAudioFile(fileId)
     if (!record) return
-    const ctx = Tone.getContext().rawContext
+    const ctx = new AudioContext()
     const buffer = await ctx.decodeAudioData(record.data.slice(0))
+    await ctx.close()
     bufferDataRef.current = computePeaks(buffer)
     loadedFileIdRef.current = fileId
   }, [computePeaks])

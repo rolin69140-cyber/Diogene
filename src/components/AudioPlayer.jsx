@@ -3,7 +3,6 @@ import useStore, { getAudioFile } from '../store/index'
 import useAudioPlayer from '../hooks/useAudioPlayer'
 import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
-import * as Tone from 'tone'
 
 const SPEEDS = [1, 0.75, 0.5]
 const TRANSPOSES = [
@@ -57,9 +56,10 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
       }
       // Si pas de données locales (ex: iPhone, fichier en cloud uniquement) → pas de waveform, pas grave
       if (!arrayBuf || cancelled) return
-      const audioCtx = Tone.getContext().rawContext
+      const audioCtx = new AudioContext()
       let decoded
-      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { return }
+      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { audioCtx.close(); return }
+      audioCtx.close()
       if (cancelled) return
       const canvas = canvasRef.current
       if (!canvas) return
