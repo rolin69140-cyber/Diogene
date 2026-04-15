@@ -285,7 +285,9 @@ export default function useAudioPlayer() {
     }
 
     if (transposeRef.current !== 0 && audioBufferRef.current) {
-      // Mode AudioBufferSourceNode (pitch shift sans changement de tempo)
+      // Mode AudioBufferSourceNode (pitch shift)
+      // S'assurer que l'HTMLAudio est bien stoppé
+      audioRef.current?.pause()
       savedPosRef.current = startPos
       const ok = await startFromBuffer(startPos)
       if (!ok) return
@@ -332,12 +334,9 @@ export default function useAudioPlayer() {
   }, [getDuration, getLogicalTime, startFromBuffer, startRaf, getAudio])
 
   const pause = useCallback(() => {
-    if (transposeRef.current !== 0) {
-      savedPosRef.current = getLogicalTime()
-      stopSourceNode()
-    } else {
-      audioRef.current?.pause()
-    }
+    savedPosRef.current = getLogicalTime()
+    stopSourceNode()
+    audioRef.current?.pause()   // toujours stopper l'HTMLAudio, quel que soit le mode
     setIsPlaying(false)
     isPlayingRef.current = false
     stopRaf()
@@ -393,7 +392,19 @@ export default function useAudioPlayer() {
     savedPosRef.current = pos
 
     if (semitones !== 0 && !audioBufferRef.current) {
-      // Décodage tardif si AudioBuffer pas encore prêt
+      // Décodage tardif — créer/reprendre le contexte audio ICI (dans le geste utilisateur)
+      // iOS Safari exige que l'AudioContext soit créé/résumé dans un gestionnaire de geste
+      try {
+        // Créer le contexte synchroniquement dans le geste (avant les awaits)
+        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+          audioCtxRef.current = new AudioContext()
+        }
+        // resume() doit être appelé sans await pour rester dans le geste iOS
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume()
+        }
+      } catch (e) { console.warn('[AudioPlayer] AudioContext init in gesture failed:', e) }
+
       if (loadedFileIdRef.current) {
         try {
           let data = null
@@ -404,9 +415,8 @@ export default function useAudioPlayer() {
             const response = await fetch(storageUrlRef.current)
             if (response.ok) data = await response.arrayBuffer()
           }
-          if (data) {
-            const ctx = await getOrCreateCtx()
-            audioBufferRef.current = await ctx.decodeAudioData(data.slice(0))
+          if (data && audioCtxRef.current) {
+            audioBufferRef.current = await audioCtxRef.current.decodeAudioData(data.slice(0))
           }
         } catch (e) {
           console.warn('[AudioPlayer] late decode failed:', e)
