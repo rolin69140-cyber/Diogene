@@ -323,6 +323,7 @@ export default function Concert() {
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
+                    getAudioCtx() // résume le contexte iOS dans le geste
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')
