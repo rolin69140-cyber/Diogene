@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react'
+import { start as toneStart } from 'tone'
 
 // Notes par défaut par pupitre
 const DEFAULT_NOTES = {
@@ -92,6 +93,7 @@ function getCtx() {
 
 export default function usePianoSynth() {
   const playNotes = useCallback(async (notes, instrument = 'piano', transposition = 0, volume = 0.8) => {
+    await toneStart()
     const { ctx, compressor } = getCtx()
     const freqs = notes
       .map((n) => noteToFreq(String(n), transposition))
@@ -101,6 +103,7 @@ export default function usePianoSynth() {
   }, [])
 
   const playPupitre = useCallback(async (pupitre, attackNotes, instrument = 'piano', transposition = 0, volume = 0.8) => {
+    await toneStart()
     const { ctx, compressor } = getCtx()
 
     if (attackNotes && attackNotes.length > 0) {

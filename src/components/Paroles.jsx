@@ -225,7 +225,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
           }}
         >
           {showPdf ? (
-            <PdfViewer url={pdfUrl} zoom={zoom} className="px-2 pb-20" />
+            <PdfViewer url={pdfUrl} zoom={zoom} label={selectedPdf?.label} className="px-2 pb-20" />
           ) : (
             <pre style={{ zoom, fontSize: '1rem' }} className="whitespace-pre-wrap leading-relaxed font-sans p-6 pb-20">
               {song.lyricsText || <span className="text-gray-400">Aucune parole enregistrée.</span>}
@@ -287,7 +287,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
         {/* Contenu scrollable + pinch */}
         <div ref={scrollRef} className="flex-1 overflow-auto p-4">
           {showPdf ? (
-            <PdfViewer url={pdfUrl} zoom={zoom} />
+            <PdfViewer url={pdfUrl} zoom={zoom} label={selectedPdf?.label} />
           ) : isPdfMode && !pdfUrl ? (
             <p className="text-sm text-gray-400 text-center py-8">Chargement…</p>
           ) : editing ? (
