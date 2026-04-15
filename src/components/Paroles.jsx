@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore from '../store/index'
 import { getPdfFile } from '../store/index'
-
-// iOS Safari ne supporte pas les PDFs dans les iframes
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+import PdfViewer from './PdfViewer'
 
 // Hook pinch-to-zoom : attache des listeners sur un élément DOM
 function usePinchZoom(zoom, setZoom) {
@@ -156,11 +154,11 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
 
   const showPdf = isPdfMode && pdfUrl
 
-  // Boutons zoom (desktop + non-iOS)
+  // Boutons zoom
   const ZoomButtons = ({ dark = false }) => (
     <div className="flex items-center gap-1">
       <button
-        onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.max(1, parseFloat((z - 0.25).toFixed(2)))) }}
+        onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.max(0.5, parseFloat((z - 0.25).toFixed(2)))) }}
         className={`w-8 h-8 flex items-center justify-center rounded-lg text-lg font-bold active:scale-90 ${dark ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200'}`}
       >−</button>
       {zoom !== 1 && (
@@ -173,24 +171,6 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
         onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.min(4, parseFloat((z + 0.25).toFixed(2)))) }}
         className={`w-8 h-8 flex items-center justify-center rounded-lg text-lg font-bold active:scale-90 ${dark ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200'}`}
       >+</button>
-    </div>
-  )
-
-  // Sur iOS, les iframes ne peuvent pas afficher de PDFs → bouton d'ouverture natif
-  const IosPdfView = ({ dark = false }) => (
-    <div className={`flex flex-col items-center justify-center gap-4 py-10 ${dark ? 'text-white' : 'text-gray-700'}`}>
-      <span className="text-5xl">📄</span>
-      <p className="text-sm text-center opacity-70">{selectedPdf?.label || 'Partition'}</p>
-      <a
-        href={pdfUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm active:scale-95 transition-transform shadow-lg"
-      >
-        Ouvrir le PDF ↗
-      </a>
-      <p className="text-xs opacity-50 text-center">S'ouvre dans Safari avec zoom et défilement natifs</p>
     </div>
   )
 
@@ -245,15 +225,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
           }}
         >
           {showPdf ? (
-            isIOS ? (
-              <IosPdfView dark />
-            ) : (
-              <iframe
-                src={pdfUrl}
-                style={{ zoom, width: '100%', height: '100dvh', border: 0, display: 'block' }}
-                title={selectedPdf?.label || 'PDF'}
-              />
-            )
+            <PdfViewer url={pdfUrl} zoom={zoom} className="px-2 pb-20" />
           ) : (
             <pre style={{ zoom, fontSize: '1rem' }} className="whitespace-pre-wrap leading-relaxed font-sans p-6 pb-20">
               {song.lyricsText || <span className="text-gray-400">Aucune parole enregistrée.</span>}
@@ -315,17 +287,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
         {/* Contenu scrollable + pinch */}
         <div ref={scrollRef} className="flex-1 overflow-auto p-4">
           {showPdf ? (
-            isIOS ? (
-              <IosPdfView />
-            ) : (
-              <div className="rounded border overflow-auto" style={{ height: '60dvh' }}>
-                <iframe
-                  src={pdfUrl}
-                  style={{ zoom, width: '100%', height: '60dvh', border: 0, display: 'block' }}
-                  title={selectedPdf?.label || 'PDF'}
-                />
-              </div>
-            )
+            <PdfViewer url={pdfUrl} zoom={zoom} />
           ) : isPdfMode && !pdfUrl ? (
             <p className="text-sm text-gray-400 text-center py-8">Chargement…</p>
           ) : editing ? (
@@ -338,8 +300,8 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
           )}
         </div>
 
-        {/* Hint pinch (pas sur iOS PDF) */}
-        {(!isIOS || !showPdf) && (showPdf || isTextMode) && !editing && (
+        {/* Hint pinch */}
+        {(showPdf || isTextMode) && !editing && (
           <p className="text-center text-xs text-gray-400 pb-2">Pincez pour zoomer</p>
         )}
       </div>
