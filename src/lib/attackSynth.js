@@ -1,7 +1,10 @@
 /**
  * Synthèse des notes d'attaque via Tone.js
  * Remplace le Web Audio API direct dans Concert.jsx et Repetition.jsx
- * Tone.start() sans await = iOS compatible
+ *
+ * Stratégie iOS :
+ *   1. Tone.start() SANS await → iOS unlock dans le geste synchrone
+ *   2. Jouer les notes dans .then() → contexte réellement running avant de scheduler
  */
 import * as Tone from 'tone'
 
@@ -74,40 +77,47 @@ export function noteStrToFreq(noteStr) {
 }
 
 // Joue une note courte (tap)
+// Tone.start() SANS await : iOS unlock synchrone dans le geste
+// .then() : les notes sont jouées une fois le contexte réellement running
 export function playNote(freq, instrument = 'piano', volume = 0.7) {
-  Tone.start() // sans await — iOS exige synchronicité dans le geste
-  try {
-    const synth = getSynth(instrument)
-    synth.volume.value = Tone.gainToDb(volume)
-    synth.triggerAttackRelease(freq, '2n')
-  } catch (e) { console.warn('[attackSynth] playNote:', e) }
+  Tone.start().then(() => {
+    try {
+      const synth = getSynth(instrument)
+      synth.volume.value = Tone.gainToDb(volume)
+      synth.triggerAttackRelease(freq, '2n')
+    } catch (e) { console.warn('[attackSynth] playNote:', e) }
+  })
 }
 
 // Joue plusieurs notes en séquence (bpm)
 export function playNotes(freqs, instrument = 'piano', bpm = 80, volume = 0.7) {
-  Tone.start()
-  try {
-    const synth = getSynth(instrument)
-    synth.volume.value = Tone.gainToDb(volume)
-    const halfBeat = 30 / bpm
-    freqs.forEach((freq, i) => {
-      synth.triggerAttackRelease(freq, '2n', Tone.now() + i * halfBeat)
-    })
-  } catch (e) { console.warn('[attackSynth] playNotes:', e) }
+  Tone.start().then(() => {
+    try {
+      const synth = getSynth(instrument)
+      synth.volume.value = Tone.gainToDb(volume)
+      const halfBeat = 30 / bpm
+      freqs.forEach((freq, i) => {
+        synth.triggerAttackRelease(freq, '2n', Tone.now() + i * halfBeat)
+      })
+    } catch (e) { console.warn('[attackSynth] playNotes:', e) }
+  })
 }
 
 // Démarre une note tenue (onPointerDown) — retourne une fonction stop
 export function startHoldNote(freqs, instrument = 'piano', volume = 0.7) {
-  Tone.start()
   if (!freqs.length) return () => {}
-  try {
-    const synth = getSynth(instrument)
-    synth.volume.value = Tone.gainToDb(volume)
-    freqs.forEach((freq) => synth.triggerAttack(freq))
-    return () => {
-      try { freqs.forEach((freq) => synth.triggerRelease(freq)) } catch (e) {}
+  let released = false
+  const synth = getSynth(instrument)
+  synth.volume.value = Tone.gainToDb(volume)
+  Tone.start().then(() => {
+    if (!released) {
+      freqs.forEach((freq) => { try { synth.triggerAttack(freq) } catch (e) {} })
     }
-  } catch (e) { return () => {} }
+  })
+  return () => {
+    released = true
+    try { freqs.forEach((freq) => synth.triggerRelease(freq)) } catch (e) {}
+  }
 }
 
 // Joue les notes d'attaque configurées pour un pupitre
