@@ -3,6 +3,7 @@ import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
+import * as Tone from 'tone'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -14,17 +15,19 @@ const PUPITRES_CONFIG = [
   { p: 'T', label: 'Ténors',   color: '#3B6D11' },
 ]
 
-let audioCtx = null
 let reverbNode = null
 
 function getAudioCtx() {
-  if (!audioCtx || audioCtx.state === 'closed') { audioCtx = new AudioContext(); reverbNode = null }
-  if (audioCtx.state === 'suspended') audioCtx.resume()
-  return audioCtx
+  // Utilise le contexte Tone.js partagé (évite les conflits iOS avec 2 AudioContexts)
+  const ctx = Tone.getContext().rawContext
+  if (ctx.state === 'suspended') ctx.resume()
+  return ctx
 }
 
 function getReverb() {
   const ctx = getAudioCtx()
+  // Invalide le cache si le contexte a changé
+  if (reverbNode && reverbNode.context !== ctx) reverbNode = null
   if (reverbNode) return reverbNode
   const sampleRate = ctx.sampleRate
   const length = sampleRate * 2.5
@@ -323,6 +326,7 @@ export default function Concert() {
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
+                    Tone.start() // déverrouille l'AudioContext sur iOS (dans le geste)
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')
