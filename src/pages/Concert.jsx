@@ -3,6 +3,7 @@ import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
+import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/attackSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -14,175 +15,6 @@ const PUPITRES_CONFIG = [
   { p: 'T', label: 'Ténors',   color: '#3B6D11' },
 ]
 
-let audioCtx = null
-let reverbNode = null
-
-function getAudioCtx() {
-  if (!audioCtx || audioCtx.state === 'closed') { audioCtx = new AudioContext(); reverbNode = null }
-  if (audioCtx.state === 'suspended') audioCtx.resume()
-  return audioCtx
-}
-
-function getReverb() {
-  const ctx = getAudioCtx()
-  if (reverbNode) return reverbNode
-  const sampleRate = ctx.sampleRate
-  const length = sampleRate * 2.5
-  const ir = ctx.createBuffer(2, length, sampleRate)
-  for (let c = 0; c < 2; c++) {
-    const ch = ir.getChannelData(c)
-    for (let i = 0; i < length; i++) {
-      ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3.0)
-    }
-  }
-  reverbNode = ctx.createConvolver()
-  reverbNode.buffer = ir
-  reverbNode.connect(ctx.destination)
-  return reverbNode
-}
-
-const NOTE_FR_MAP = { 'do': 'C', 'ré': 'D', 're': 'D', 'mi': 'E', 'fa': 'F', 'sol': 'G', 'la': 'A', 'si': 'B' }
-const NOTE_BASE_FREQ = { C: 261.63, D: 293.66, E: 329.63, F: 349.23, G: 392.0, A: 440.0, B: 493.88 }
-
-function noteStrToFreq(noteStr) {
-  const s = noteStr.trim().toLowerCase()
-    .replace('♭', 'b').replace('♯', '#')
-  // Formats acceptés : alt avant octave (F#4) OU après (F4#)
-  const match = s.match(/^([a-zÀ-ÿ]+?)(#|bb|b|bémol|bemol|dièse|diese)?(\d+)(#|bb|b|bémol|bemol|dièse|diese)?$/)
-  if (!match) return null
-  const [, name, altBefore, octStr, altAfter] = match
-  const alt = altBefore || altAfter
-  const letter = NOTE_FR_MAP[name] || name.toUpperCase()
-  const base = NOTE_BASE_FREQ[letter]
-  if (!base) return null
-  let semitones = 0
-  if (alt === '#' || alt === 'dièse' || alt === 'diese') semitones = 1
-  else if (alt === 'b' || alt === 'bémol' || alt === 'bemol' || alt === 'bb') semitones = -1
-  return base * Math.pow(2, parseInt(octStr) - 4) * Math.pow(2, semitones / 12)
-}
-
-function playOneFreq(ctx, freq, volume, startTime, instrument = 'piano') {
-  const t = startTime
-  const reverb = getReverb()
-  const addOsc = (type, f, vol, detune, attack, decay, reverbMix = 0.35) => {
-    const osc = ctx.createOscillator()
-    const dryGain = ctx.createGain()
-    const wetGain = ctx.createGain()
-    osc.type = type
-    osc.frequency.value = f
-    if (detune) osc.detune.value = detune
-    dryGain.gain.setValueAtTime(0.001, t)
-    dryGain.gain.linearRampToValueAtTime(vol, t + attack)
-    dryGain.gain.exponentialRampToValueAtTime(0.001, t + decay)
-    wetGain.gain.value = vol * reverbMix
-    osc.connect(dryGain);  dryGain.connect(ctx.destination)
-    osc.connect(wetGain);  wetGain.connect(reverb)
-    osc.start(t); osc.stop(t + decay + 0.1)
-  }
-  if (instrument === 'piano') {
-    addOsc('triangle', freq,      volume,       0,   0.005, 2.2, 0.25)
-    addOsc('sine',     freq * 2,  volume * 0.3, 0,   0.005, 1.4, 0.2)
-    addOsc('sine',     freq * 3,  volume * 0.1, 0,   0.005, 0.8, 0.1)
-  } else if (instrument === 'harpe') {
-    addOsc('triangle', freq,      volume,       0,   0.002, 0.5,  0.5)
-    addOsc('sine',     freq * 3,  volume * 0.4, 0,   0.002, 0.25, 0.4)
-  } else if (instrument === 'orgue') {
-    addOsc('sine',     freq,      volume,       0,   0.08,  3.5, 0.3)
-    addOsc('sine',     freq * 2,  volume * 0.5, 0,   0.08,  3.5, 0.3)
-    addOsc('sine',     freq * 3,  volume * 0.2, 0,   0.10,  3.0, 0.2)
-  } else if (instrument === 'choeur') {
-    addOsc('sine',     freq,      volume,       0,   0.12,  3.0, 0.5)
-    addOsc('sine',     freq,      volume * 0.6, 8,   0.14,  3.0, 0.5)
-    addOsc('sine',     freq,      volume * 0.4, -7,  0.16,  2.8, 0.5)
-    addOsc('sine',     freq * 2,  volume * 0.15,0,   0.12,  2.0, 0.4)
-  } else if (instrument === 'cordes') {
-    addOsc('sawtooth', freq,      volume,       0,   0.18,  2.8, 0.4)
-    addOsc('sawtooth', freq,      volume * 0.5, 5,   0.20,  2.8, 0.4)
-    addOsc('sine',     freq * 2,  volume * 0.2, 0,   0.15,  2.0, 0.3)
-  } else if (instrument === 'cuivres') {
-    addOsc('sawtooth', freq,      volume,       0,   0.06,  2.5, 0.3)
-    addOsc('sawtooth', freq * 2,  volume * 0.6, 0,   0.08,  2.0, 0.3)
-    addOsc('sawtooth', freq * 3,  volume * 0.3, 0,   0.10,  1.6, 0.2)
-    addOsc('square',   freq,      volume * 0.2, 0,   0.06,  2.5, 0.2)
-  } else {
-    addOsc('triangle', freq,      volume,       0,   0.005, 2.0, 0.3)
-  }
-}
-
-function startHoldNote(freqs, volume = 0.7, instrument = 'piano') {
-  if (!freqs.length) return () => {}
-  try {
-    const ctx = getAudioCtx()
-    const reverb = getReverb()
-    const nodes = []
-    const addHoldOsc = (type, f, vol, detune, attack, reverbMix = 0.35) => {
-      const osc = ctx.createOscillator()
-      const dryGain = ctx.createGain()
-      const wetGain = ctx.createGain()
-      osc.type = type; osc.frequency.value = f
-      if (detune) osc.detune.value = detune
-      const t = ctx.currentTime
-      dryGain.gain.setValueAtTime(0.001, t)
-      dryGain.gain.linearRampToValueAtTime(vol, t + attack)
-      wetGain.gain.value = vol * reverbMix
-      osc.connect(dryGain); dryGain.connect(ctx.destination)
-      osc.connect(wetGain); wetGain.connect(reverb)
-      osc.start(t); nodes.push({ osc, dryGain })
-    }
-    freqs.forEach((freq) => {
-      if (instrument === 'piano') {
-        addHoldOsc('triangle', freq,      volume,       0,  0.005, 0.25)
-        addHoldOsc('sine',     freq * 2,  volume * 0.3, 0,  0.005, 0.2)
-      } else if (instrument === 'harpe') {
-        addHoldOsc('triangle', freq,      volume,       0,  0.002, 0.5)
-      } else if (instrument === 'orgue') {
-        addHoldOsc('sine',     freq,      volume,       0,  0.08,  0.3)
-        addHoldOsc('sine',     freq * 2,  volume * 0.5, 0,  0.08,  0.3)
-      } else if (instrument === 'choeur') {
-        addHoldOsc('sine',     freq,      volume,       0,  0.12,  0.5)
-        addHoldOsc('sine',     freq,      volume * 0.6, 8,  0.14,  0.5)
-        addHoldOsc('sine',     freq,      volume * 0.4, -7, 0.16,  0.5)
-      } else if (instrument === 'cordes') {
-        addHoldOsc('sawtooth', freq,      volume,       0,  0.18,  0.4)
-        addHoldOsc('sawtooth', freq,      volume * 0.5, 5,  0.20,  0.4)
-      } else if (instrument === 'cuivres') {
-        addHoldOsc('sawtooth', freq,      volume,       0,  0.06,  0.3)
-        addHoldOsc('sawtooth', freq * 2,  volume * 0.6, 0,  0.08,  0.3)
-        addHoldOsc('sawtooth', freq * 3,  volume * 0.3, 0,  0.10,  0.2)
-        addHoldOsc('square',   freq,      volume * 0.2, 0,  0.06,  0.2)
-      } else {
-        addHoldOsc('triangle', freq,      volume,       0,  0.005, 0.3)
-      }
-    })
-    return () => {
-      const t = ctx.currentTime
-      nodes.forEach(({ osc, dryGain }) => {
-        try {
-          dryGain.gain.cancelScheduledValues(t)
-          dryGain.gain.setValueAtTime(dryGain.gain.value, t)
-          dryGain.gain.linearRampToValueAtTime(0.001, t + 0.2)
-          osc.stop(t + 0.25)
-        } catch (e) {}
-      })
-    }
-  } catch (e) { return () => {} }
-}
-
-function playFreqs(freqs, volume = 0.7, bpm = 80, instrument = 'piano') {
-  try {
-    const ctx = getAudioCtx()
-    const halfBeat = 30 / bpm
-    freqs.forEach((freq, i) => {
-      playOneFreq(ctx, freq, volume, ctx.currentTime + i * halfBeat, instrument)
-    })
-  } catch (e) {}
-}
-
-function playPupitre(pupitre, attackNotes, bpm, instrument) {
-  if (!attackNotes || attackNotes.length === 0) return
-  const freqs = attackNotes.map(noteStrToFreq).filter(Boolean)
-  if (freqs.length > 0) playFreqs(freqs, 0.7, bpm || 80, instrument || 'piano')
-}
 
 export default function Concert() {
   const sets = useStore((s) => s.sets)
@@ -323,10 +155,10 @@ export default function Concert() {
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId)
-                    getAudioCtx() // résume le contexte iOS dans le geste
+
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
-                    holdStopRef.current = startHoldNote(freqs, 0.7, settings.instrumentAttaque || 'piano')
+                    holdStopRef.current = startHoldNote(freqs, settings.instrumentAttaque || 'piano', 0.7)
                     if (hint) speakHint(hint)
                   }}
                   onPointerUp={() => { holdStopRef.current?.(); holdStopRef.current = null }}
@@ -344,7 +176,7 @@ export default function Concert() {
                     <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
                     <div className="absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-44 right-0 left-auto">
                       <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        onClick={() => { playPupitre(p, notes, currentSong?.bpm, settings.instrumentAttaque); setMenuOpen(null) }}>
+                        onClick={() => { playPupitre(notes, settings.instrumentAttaque || 'piano', currentSong?.bpm); setMenuOpen(null) }}>
                         🎵 Jouer la note
                       </button>
                       {hasAudio && (
