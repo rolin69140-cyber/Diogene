@@ -1,38 +1,33 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { getAudioFile } from '../store/index'
+import * as Tone from 'tone'
 
 export default function useAudioPlayer() {
-  // ── HTMLAudioElement (mode direct, transpose = 0) ─────────────────────────
+  // ── HTMLAudioElement — seul moteur de lecture ─────────────────────────────
   const audioRef        = useRef(null)
   const blobUrlRef      = useRef(null)
   const loadedFileIdRef = useRef(null)
+  const storageUrlRef   = useRef(null)
+  const loadErrorRef    = useRef(false)
 
-  // ── Web Audio API (mode pitch shift, transpose ≠ 0) ──────────────────────
-  const audioCtxRef     = useRef(null)
-  const audioBufferRef  = useRef(null)   // AudioBuffer décodé (cache)
-  const sourceNodeRef   = useRef(null)   // AudioBufferSourceNode en cours
-  const gainNodeRef     = useRef(null)
-  const storageUrlRef   = useRef(null)   // URL Firebase Storage (fallback)
-  const loadErrorRef    = useRef(false)  // true si le fichier n'est pas disponible
+  // ── Tone.js PitchShift — branché sur l'HTMLAudioElement ──────────────────
+  const pitchShiftRef  = useRef(null)   // Tone.PitchShift
+  const mediaSourceRef = useRef(null)   // MediaElementAudioSourceNode (créé 1x)
+  const toneReadyRef   = useRef(false)  // chaîne Tone branchée ?
 
-  // Position tracking pour le mode AudioBufferSourceNode
-  const absStartRef  = useRef(0)   // audioCtx.currentTime au moment du start
-  const posAtStartRef = useRef(0)  // position logique au moment du start
-  const savedPosRef   = useRef(0)  // position sauvegardée (pause / seek)
-
-  // RAF
+  // ── RAF ───────────────────────────────────────────────────────────────────
   const rafRef = useRef(null)
 
-  // Refs "hot" (lues dans les callbacks sans re-render)
-  const isPlayingRef  = useRef(false)
-  const loopRef       = useRef(false)
-  const speedRef      = useRef(1)
-  const transposeRef  = useRef(0)
-  const segStartRef   = useRef(0)
-  const segEndRef     = useRef(null)
+  // ── Refs "hot" ────────────────────────────────────────────────────────────
+  const isPlayingRef = useRef(false)
+  const loopRef      = useRef(false)
+  const speedRef     = useRef(1)
+  const transposeRef = useRef(0)
+  const segStartRef  = useRef(0)
+  const segEndRef    = useRef(null)
 
-  // ── État React (déclenchent les re-renders UI) ────────────────────────────
-  const [loadError,    setLoadError]    = useState(false)  // fichier indisponible
+  // ── État React ────────────────────────────────────────────────────────────
+  const [loadError,    setLoadError]    = useState(false)
   const [isPlaying,    setIsPlaying]    = useState(false)
   const [duration,     setDuration]     = useState(0)
   const [currentTime,  setCurrentTime]  = useState(0)
@@ -54,125 +49,94 @@ export default function useAudioPlayer() {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
   }, [])
 
-  const stopSourceNode = useCallback(() => {
-    if (sourceNodeRef.current) {
-      try { sourceNodeRef.current.onended = null } catch {}
-      try { sourceNodeRef.current.stop()         } catch {}
-      try { sourceNodeRef.current.disconnect()   } catch {}
-      sourceNodeRef.current = null
+  const getAudio = useCallback(() => {
+    if (!audioRef.current) {
+      const a = new Audio()
+      a.preservesPitch = true
+      a.mozPreservesPitch = true
+      a.webkitPreservesPitch = true
+      // Fin naturelle de lecture
+      a.addEventListener('ended', () => {
+        if (loopRef.current) {
+          a.currentTime = segStartRef.current
+          a.play().catch(() => {})
+        } else {
+          stopRaf()
+          setIsPlaying(false)
+          isPlayingRef.current = false
+          setCurrentTime(segStartRef.current)
+          a.currentTime = segStartRef.current
+        }
+      })
+      audioRef.current = a
     }
-  }, [])
+    return audioRef.current
+  }, [stopRaf])
 
-  const getOrCreateCtx = useCallback(async () => {
-    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      audioCtxRef.current = new AudioContext()
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      await audioCtxRef.current.resume()
-    }
-    return audioCtxRef.current
-  }, [])
+  const getDuration = useCallback(() => audioRef.current?.duration ?? 0, [])
 
-  /** Retourne la position de lecture actuelle (en secondes) */
-  const getLogicalTime = useCallback(() => {
-    if (transposeRef.current !== 0 && isPlayingRef.current && audioCtxRef.current) {
-      const elapsed = (audioCtxRef.current.currentTime - absStartRef.current) * speedRef.current
-      return posAtStartRef.current + elapsed
-    }
-    if (transposeRef.current !== 0) return savedPosRef.current
-    return audioRef.current?.currentTime ?? 0
-  }, [])
-
-  /** Durée totale disponible */
-  const getDuration = useCallback(() => {
-    return audioBufferRef.current?.duration ?? audioRef.current?.duration ?? 0
-  }, [])
-
-  // ── RAF tick ──────────────────────────────────────────────────────────────
+  // ── RAF tick — suit la position + gère la boucle de segment ──────────────
 
   const startRaf = useCallback(() => {
     stopRaf()
     const tick = () => {
       if (!isPlayingRef.current) return
-      const pos    = getLogicalTime()
-      const endPos = segEndRef.current ?? getDuration()
+      const audio  = audioRef.current
+      if (!audio) return
+      const pos    = audio.currentTime
+      const endPos = segEndRef.current ?? audio.duration ?? Infinity
       setCurrentTime(pos)
-      if (pos >= endPos - 0.05) {
-        if (loopRef.current) {
-          // Le looping sur AudioBufferSourceNode est géré dans onended
-          if (transposeRef.current === 0 && audioRef.current) {
-            audioRef.current.currentTime = segStartRef.current
-          }
-        }
+      // Boucle de segment (segEnd < durée totale)
+      if (isFinite(endPos) && pos >= endPos - 0.05 && loopRef.current) {
+        audio.currentTime = segStartRef.current
       }
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
-  }, [stopRaf, getLogicalTime, getDuration])
+  }, [stopRaf])
 
-  // ── Création et démarrage d'un AudioBufferSourceNode ─────────────────────
+  // ── Tone.js : branchement MediaElement → PitchShift (1 seule fois) ────────
+  // Doit être appelé dans un geste utilisateur (tap) pour iOS Safari
 
-  const startFromBuffer = useCallback(async (fromPos) => {
-    if (!audioBufferRef.current) return false
-    const ctx = await getOrCreateCtx()
+  const setupToneChain = useCallback(async () => {
+    if (toneReadyRef.current) return
+    const audio = getAudio()
 
-    stopSourceNode()
+    // Tone.start() résume l'AudioContext (exigé par iOS dans un geste)
+    await Tone.start()
 
-    // GainNode (créé une fois par contexte)
-    if (!gainNodeRef.current || gainNodeRef.current.context !== ctx) {
-      gainNodeRef.current = ctx.createGain()
-      gainNodeRef.current.connect(ctx.destination)
+    // PitchShift (pitch en demi-tons, windowSize petit = moins de latence)
+    if (!pitchShiftRef.current) {
+      pitchShiftRef.current = new Tone.PitchShift({
+        pitch: transposeRef.current,
+        windowSize: 0.1,   // 100ms — bon compromis qualité/latence
+        delayTime: 0,
+        feedback: 0,
+      })
+      pitchShiftRef.current.toDestination()
     }
 
-    const source = ctx.createBufferSource()
-    source.buffer          = audioBufferRef.current
-    source.playbackRate.value = speedRef.current
-    source.detune.value    = transposeRef.current * 100  // demi-tons → cents
-
-    source.connect(gainNodeRef.current)
-
-    const bufDur = audioBufferRef.current.duration
-    const endPos = segEndRef.current ?? bufDur
-    const clampedFrom = Math.max(segStartRef.current, Math.min(fromPos, endPos))
-    const playDuration  = Math.max(0, (endPos - clampedFrom) / speedRef.current)
-
-    source.start(0, clampedFrom, playDuration)
-
-    sourceNodeRef.current  = source
-    absStartRef.current    = ctx.currentTime
-    posAtStartRef.current  = clampedFrom
-
-    // Fin naturelle du segment
-    source.onended = () => {
-      if (sourceNodeRef.current !== source) return  // remplacé entretemps
-      if (loopRef.current && isPlayingRef.current) {
-        savedPosRef.current = segStartRef.current
-        startFromBuffer(segStartRef.current)
-      } else if (isPlayingRef.current) {
-        stopRaf()
-        savedPosRef.current = segStartRef.current
-        setIsPlaying(false)
-        isPlayingRef.current = false
-        setCurrentTime(segStartRef.current)
-      }
+    // MediaElementAudioSourceNode — capture l'HTMLAudio dans le contexte Tone
+    // À partir de là, l'audio NE PASSE PLUS par le haut-parleur par défaut
+    // il faut obligatoirement le connecter à la destination Tone
+    if (!mediaSourceRef.current) {
+      const rawCtx = Tone.getContext().rawContext
+      mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
     }
-    return true
-  }, [getOrCreateCtx, stopSourceNode, stopRaf])
 
-  /** Charge (ou recharge) un fichier audio depuis l'IndexedDB ou Firebase Storage */
+    // audio → PitchShift → haut-parleur
+    mediaSourceRef.current.connect(pitchShiftRef.current.input)
+
+    toneReadyRef.current = true
+  }, [getAudio])
+
+  // ── Chargement fichier ────────────────────────────────────────────────────
+
   const loadFile = useCallback(async (fileId, storageUrl = null) => {
     if (loadedFileIdRef.current === fileId && audioRef.current?.src) return true
 
-    // Arrêt total
     stopRaf()
-    stopSourceNode()
-    savedPosRef.current = 0
-    audioBufferRef.current = null
-    gainNodeRef.current = null
     storageUrlRef.current = storageUrl
-
-    // 1. Essai IndexedDB local
-    const record = await getAudioFile(fileId)
 
     const audio = getAudio()
     audio.pause()
@@ -182,15 +146,16 @@ export default function useAudioPlayer() {
     loadErrorRef.current = false
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
 
+    const record = await getAudioFile(fileId)
+
     if (record) {
-      // ── Données locales → Blob URL ──────────────────────────────────────────
-      const data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-      const mimeType = record.type || 'audio/mpeg'
-      const blob = new Blob([data], { type: mimeType })
+      const data = record.data instanceof ArrayBuffer
+        ? record.data
+        : await record.data.arrayBuffer?.()
+      const blob = new Blob([data], { type: record.type || 'audio/mpeg' })
       blobUrlRef.current = URL.createObjectURL(blob)
       audio.src = blobUrlRef.current
       audio.load()
-
       await new Promise((resolve) => {
         audio.onloadedmetadata = () => {
           const dur = audio.duration
@@ -202,25 +167,12 @@ export default function useAudioPlayer() {
         }
         audio.onerror = resolve
       })
-
-      // Décodage AudioBuffer en arrière-plan (pitch shift)
-      try {
-        const ctx = await getOrCreateCtx()
-        audioBufferRef.current = await ctx.decodeAudioData(data.slice(0))
-      } catch (e) {
-        console.warn('[AudioPlayer] decodeAudioData failed — pitch shift unavailable', e)
-        audioBufferRef.current = null
-      }
-
     } else if (storageUrl) {
-      // ── Fallback Firebase Storage — URL directe ─────────────────────────────
-      // iOS Safari : ne pas faire fetch+blob, utiliser l'URL directement.
-      // iOS ne déclenche pas loadedmetadata avant play(), donc on n'attend pas.
+      // iOS Safari : URL directe, pas de fetch+blob
       audio.preload = 'metadata'
       audio.src = storageUrl
-      // On tente d'obtenir les métadonnées, mais on ne bloque pas si iOS refuse
       await new Promise((resolve) => {
-        const tid = setTimeout(resolve, 3000) // 3s max, iOS peut ne jamais déclencher
+        const tid = setTimeout(resolve, 3000) // iOS peut ne jamais déclencher loadedmetadata
         audio.onloadedmetadata = () => {
           clearTimeout(tid)
           const dur = audio.duration
@@ -234,23 +186,7 @@ export default function useAudioPlayer() {
         }
         audio.onerror = () => { clearTimeout(tid); resolve() }
       })
-
-      // Fetch ArrayBuffer en arrière-plan uniquement pour le pitch shift (desktop)
-      ;(async () => {
-        try {
-          const response = await fetch(storageUrl)
-          if (response.ok && loadedFileIdRef.current === fileId) {
-            const buf = await response.arrayBuffer()
-            const ctx = await getOrCreateCtx()
-            audioBufferRef.current = await ctx.decodeAudioData(buf.slice(0))
-          }
-        } catch (e) {
-          console.warn('[AudioPlayer] background fetch for pitch shift failed:', e)
-        }
-      })()
-
     } else {
-      // ── Aucune source disponible ────────────────────────────────────────────
       setLoadError(true)
       loadErrorRef.current = true
       return false
@@ -258,202 +194,106 @@ export default function useAudioPlayer() {
 
     loadedFileIdRef.current = fileId
     return true
-  }, [stopRaf, stopSourceNode, getOrCreateCtx])
+  }, [stopRaf, getAudio])
 
-  const getAudio = useCallback(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio()
-      audioRef.current.preservesPitch = true
-      audioRef.current.mozPreservesPitch = true
-      audioRef.current.webkitPreservesPitch = true
-    }
-    return audioRef.current
-  }, [])
-
-  // ── API publique ──────────────────────────────────────────────────────────
+  // ── Lecture ───────────────────────────────────────────────────────────────
 
   const play = useCallback(async (fromTime = null) => {
-    const dur    = getDuration()
-    const endPos = segEndRef.current ?? dur
+    const audio  = getAudio()
+    if (!audio.src || loadErrorRef.current) return
+
+    const dur    = audio.duration
+    const endPos = segEndRef.current ?? dur ?? Infinity
 
     let startPos
     if (fromTime !== null) {
-      startPos = Math.max(segStartRef.current, Math.min(fromTime, endPos))
+      startPos = Math.max(segStartRef.current, Math.min(fromTime, isFinite(endPos) ? endPos : Infinity))
     } else {
-      const cur = getLogicalTime()
-      startPos = (cur >= endPos - 0.05) ? segStartRef.current : cur
+      const cur = audio.currentTime
+      startPos = (isFinite(endPos) && cur >= endPos - 0.05) ? segStartRef.current : cur
     }
 
-    if (transposeRef.current !== 0 && audioBufferRef.current) {
-      // Mode AudioBufferSourceNode (pitch shift)
-      // S'assurer que l'HTMLAudio est bien stoppé
-      audioRef.current?.pause()
-      savedPosRef.current = startPos
-      const ok = await startFromBuffer(startPos)
-      if (!ok) return
+    audio.preservesPitch = true
+    audio.mozPreservesPitch = true
+    audio.webkitPreservesPitch = true
+    audio.playbackRate = speedRef.current
+
+    if (startPos > 0 && dur && isFinite(dur)) audio.currentTime = startPos
+
+    try {
+      await audio.play()
       setIsPlaying(true)
       isPlayingRef.current = true
+      // iOS : durée disponible seulement après play()
+      if (!segEndRef.current && audio.duration && isFinite(audio.duration)) {
+        const d = audio.duration
+        setDuration(d)
+        setSegmentEnd(d); segEndRef.current = d
+      }
+      if (!audio.duration || !isFinite(audio.duration)) {
+        audio.addEventListener('loadedmetadata', () => {
+          const d = audio.duration
+          if (d && isFinite(d)) { setDuration(d); setSegmentEnd(d); segEndRef.current = d }
+        }, { once: true })
+      }
       startRaf()
-    } else {
-      // Mode HTMLAudioElement (direct)
-      const audio = getAudio()
-      if (!audio.src || loadErrorRef.current) return
-      audio.preservesPitch = true
-      audio.mozPreservesPitch = true
-      audio.webkitPreservesPitch = true
-      audio.playbackRate = speedRef.current
-      // Sur iOS, currentTime ne peut être défini qu'après chargement — on ignore si durée inconnue
-      if (startPos > 0 && audio.duration && isFinite(audio.duration)) {
-        audio.currentTime = startPos
-      }
-      try {
-        await audio.play()
-        setIsPlaying(true)
-        isPlayingRef.current = true
-        // iOS charge les métadonnées au moment du play() — on récupère la durée ici
-        if (!segEndRef.current && audio.duration && isFinite(audio.duration)) {
-          const dur = audio.duration
-          setDuration(dur)
-          setSegmentEnd(dur); segEndRef.current = dur
-        }
-        // Écouter loadedmetadata si pas encore chargé (iOS)
-        if (!audio.duration || !isFinite(audio.duration)) {
-          audio.addEventListener('loadedmetadata', () => {
-            const dur = audio.duration
-            if (dur && isFinite(dur)) {
-              setDuration(dur)
-              setSegmentEnd(dur); segEndRef.current = dur
-            }
-          }, { once: true })
-        }
-        startRaf()
-      } catch (e) {
-        console.warn('[AudioPlayer] play() failed:', e)
-      }
+    } catch (e) {
+      console.warn('[AudioPlayer] play() failed:', e)
     }
-  }, [getDuration, getLogicalTime, startFromBuffer, startRaf, getAudio])
+  }, [getAudio, startRaf])
+
+  // ── Pause ─────────────────────────────────────────────────────────────────
 
   const pause = useCallback(() => {
-    savedPosRef.current = getLogicalTime()
-    stopSourceNode()
-    audioRef.current?.pause()   // toujours stopper l'HTMLAudio, quel que soit le mode
+    audioRef.current?.pause()
     setIsPlaying(false)
     isPlayingRef.current = false
     stopRaf()
-  }, [getLogicalTime, stopSourceNode, stopRaf])
+  }, [stopRaf])
+
+  // ── Seek ──────────────────────────────────────────────────────────────────
 
   const seek = useCallback((time) => {
-    const wasPlaying = isPlayingRef.current
-    if (transposeRef.current !== 0) {
-      savedPosRef.current = time
-      if (wasPlaying) {
-        stopSourceNode()
-        startFromBuffer(time).then(() => {
-          absStartRef.current = audioCtxRef.current?.currentTime ?? 0
-          posAtStartRef.current = time
-        })
-      }
-    } else {
-      if (audioRef.current) audioRef.current.currentTime = time
-    }
+    if (audioRef.current) audioRef.current.currentTime = time
     setCurrentTime(time)
-  }, [stopSourceNode, startFromBuffer])
+  }, [])
 
   const resetToSegmentStart = useCallback(() => {
     seek(segStartRef.current)
   }, [seek])
 
+  // ── Vitesse ───────────────────────────────────────────────────────────────
+
   const changeSpeed = useCallback((newSpeed) => {
     setSpeed(newSpeed)
     speedRef.current = newSpeed
-    if (transposeRef.current !== 0 && isPlayingRef.current) {
-      const pos = getLogicalTime()
-      savedPosRef.current = pos
-      stopSourceNode()
-      startFromBuffer(pos)
-    } else if (audioRef.current) {
-      audioRef.current.playbackRate = newSpeed
-    }
-  }, [getLogicalTime, stopSourceNode, startFromBuffer])
+    if (audioRef.current) audioRef.current.playbackRate = newSpeed
+  }, [])
+
+  // ── Transposition — Tone.PitchShift (tempo inchangé) ─────────────────────
 
   const changeTranspose = useCallback(async (semitones) => {
-    const wasPlaying = isPlayingRef.current
-    const pos = getLogicalTime()
-
     setTranspose(semitones)
     transposeRef.current = semitones
 
-    // Stopper TOUT : HTMLAudioElement ET AudioBufferSourceNode
-    stopSourceNode()
-    if (audioRef.current) audioRef.current.pause()
-    setIsPlaying(false)
-    isPlayingRef.current = false
-    stopRaf()
-    savedPosRef.current = pos
+    // Branchement Tone (1re fois uniquement — dans le geste utilisateur = OK iOS)
+    await setupToneChain()
 
-    if (semitones !== 0 && !audioBufferRef.current) {
-      // Décodage tardif — créer/reprendre le contexte audio ICI (dans le geste utilisateur)
-      // iOS Safari exige que l'AudioContext soit créé/résumé dans un gestionnaire de geste
-      try {
-        // Créer le contexte synchroniquement dans le geste (avant les awaits)
-        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-          audioCtxRef.current = new AudioContext()
-        }
-        // resume() doit être appelé sans await pour rester dans le geste iOS
-        if (audioCtxRef.current.state === 'suspended') {
-          audioCtxRef.current.resume()
-        }
-      } catch (e) { console.warn('[AudioPlayer] AudioContext init in gesture failed:', e) }
-
-      if (loadedFileIdRef.current) {
-        try {
-          let data = null
-          const record = await getAudioFile(loadedFileIdRef.current)
-          if (record) {
-            data = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
-          } else if (storageUrlRef.current) {
-            const response = await fetch(storageUrlRef.current)
-            if (response.ok) data = await response.arrayBuffer()
-          }
-          if (data && audioCtxRef.current) {
-            audioBufferRef.current = await audioCtxRef.current.decodeAudioData(data.slice(0))
-          }
-        } catch (e) {
-          console.warn('[AudioPlayer] late decode failed:', e)
-        }
-      }
+    // Changer le pitch à la volée, sans interrompre la lecture
+    if (pitchShiftRef.current) {
+      pitchShiftRef.current.pitch = semitones
     }
+  }, [setupToneChain])
 
-    if (!wasPlaying) return
-
-    if (semitones === 0) {
-      // Mode HTMLAudioElement
-      const audio = getAudio()
-      audio.preservesPitch = true
-      audio.mozPreservesPitch = true
-      audio.webkitPreservesPitch = true
-      audio.playbackRate = speedRef.current
-      if (pos > 0 && audio.duration && isFinite(audio.duration)) audio.currentTime = pos
-      try {
-        await audio.play()
-        setIsPlaying(true)
-        isPlayingRef.current = true
-        startRaf()
-      } catch (e) { console.warn('[AudioPlayer] play after transpose=0 failed:', e) }
-    } else if (audioBufferRef.current) {
-      // Mode AudioBufferSourceNode
-      savedPosRef.current = pos
-      await startFromBuffer(pos)
-      setIsPlaying(true)
-      isPlayingRef.current = true
-      startRaf()
-    }
-    // Si audioBufferRef toujours null : on reste en pause, l'utilisateur peut appuyer sur ▶
-  }, [getLogicalTime, stopSourceNode, stopRaf, getAudio, startFromBuffer, startRaf, getOrCreateCtx])
+  // ── Boucle ────────────────────────────────────────────────────────────────
 
   const toggleLoop = useCallback(() => {
-    setLoop((l) => { loopRef.current = !l; return !l })
+    const newLoop = !loopRef.current
+    loopRef.current = newLoop
+    setLoop(newLoop)
   }, [])
+
+  // ── Segment ───────────────────────────────────────────────────────────────
 
   const setSegment = useCallback((start, end) => {
     setSegmentStart(start); segStartRef.current = start
@@ -466,16 +306,16 @@ export default function useAudioPlayer() {
     setSegmentEnd(dur);   segEndRef.current   = dur
   }, [getDuration])
 
-  // Nettoyage à l'unmount
+  // ── Nettoyage ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     return () => {
       stopRaf()
-      stopSourceNode()
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = '' }
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-      if (audioCtxRef.current) { try { audioCtxRef.current.close() } catch {} }
+      if (pitchShiftRef.current) { try { pitchShiftRef.current.dispose() } catch {} }
     }
-  }, [stopRaf, stopSourceNode])
+  }, [stopRaf])
 
   return {
     isPlaying, duration, currentTime, loop, speed, transpose,
