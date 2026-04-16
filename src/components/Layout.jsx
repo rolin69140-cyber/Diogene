@@ -18,9 +18,13 @@ const BACKUP_INTERVAL_DAYS = 30
 export default function Layout({ children }) {
   const modeScene       = useStore((s) => s.settings.modeScene)
   const theme           = useStore((s) => s.settings.theme)
-  const lastBackupDate  = useStore((s) => s.settings.lastBackupDate)
-  const updateSettings  = useStore((s) => s.updateSettings)
-  const exportConfig    = useStore((s) => s.exportConfig)
+  const lastBackupDate    = useStore((s) => s.settings.lastBackupDate)
+  const directorPin       = useStore((s) => s.settings.directorPin)
+  const directorUnlocked  = useStore((s) => s.directorUnlocked)
+  const updateSettings    = useStore((s) => s.updateSettings)
+  const exportConfig      = useStore((s) => s.exportConfig)
+  // Le popup n'est visible que si pas de PIN configuré (tout le monde admin) ou PIN déverrouillé
+  const isDirector = !directorPin || directorUnlocked
   const { syncReady, firebaseEnabled, migrating, migrateProgress, appConfig } = useFirebaseSync()
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
@@ -32,16 +36,15 @@ export default function Layout({ children }) {
     const now = Date.now()
     const last = lastBackupDate ? new Date(lastBackupDate).getTime() : 0
     const daysSince = (now - last) / (1000 * 60 * 60 * 24)
-    if (daysSince >= BACKUP_INTERVAL_DAYS) {
-      // Petit délai pour laisser l'appli se charger avant d'afficher le popup
+    if (daysSince >= BACKUP_INTERVAL_DAYS && isDirector) {
       const t = setTimeout(() => setShowBackupPrompt(true), 1500)
       return () => clearTimeout(t)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDirector]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [backupProgress, setBackupProgress] = useState(null)
 
-  const handleBackupYes = async () => {
+  const handleBackupZip = async () => {
     setBackupProgress('Préparation…')
     try {
       const blob = await exportFullZip(exportConfig, setBackupProgress)
@@ -58,6 +61,19 @@ export default function Layout({ children }) {
       setBackupProgress(null)
       setShowBackupPrompt(false)
     }
+  }
+
+  const handleBackupJson = () => {
+    const json = exportConfig()
+    const blob = new Blob([json], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `diogene-config-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    updateSettings({ lastBackupDate: new Date().toISOString() })
+    setShowBackupPrompt(false)
   }
 
   const handleBackupNo = () => {
@@ -191,18 +207,24 @@ export default function Layout({ children }) {
             {backupProgress ? (
               <p className="text-sm text-blue-500 animate-pulse py-1">{backupProgress}</p>
             ) : (
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-2">
                 <button
-                  onClick={handleBackupNo}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400"
+                  onClick={handleBackupZip}
+                  className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
                 >
-                  Plus tard
+                  📦 Complète (sons + PDF + config)
                 </button>
                 <button
-                  onClick={handleBackupYes}
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
+                  onClick={handleBackupJson}
+                  className="w-full py-2.5 rounded-xl border border-blue-300 dark:border-blue-700 text-sm text-blue-700 dark:text-blue-300"
                 >
-                  Sauvegarder
+                  📄 Config seulement (JSON)
+                </button>
+                <button
+                  onClick={handleBackupNo}
+                  className="w-full py-2 text-xs text-gray-400"
+                >
+                  Plus tard
                 </button>
               </div>
             )}
