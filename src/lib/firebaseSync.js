@@ -36,6 +36,15 @@ export async function saveAppConfig(data) {
   await setDoc(doc(db, 'config', 'app'), data, { merge: true })
 }
 
+/**
+ * Synchronise le PIN chef de chœur vers Firebase.
+ * Tous les appareils le reçoivent via subscribeAppConfig.
+ */
+export async function saveDirectorPin(pin) {
+  if (!FIREBASE_ENABLED || !db) return
+  await setDoc(doc(db, 'config', 'app'), { directorPin: pin }, { merge: true })
+}
+
 // ─── Firestore : bibliothèque ─────────────────────────────────────────────────
 
 /**

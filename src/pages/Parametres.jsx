@@ -3,6 +3,7 @@ import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/ind
 import useLibrary from '../hooks/useLibrary'
 import { saveBgImage, deleteBgImage, loadBgImage } from '../lib/bgImageStore'
 import { exportFullZip, importFullZip } from '../lib/fullBackup'
+import { saveDirectorPin } from '../lib/firebaseSync'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe', 'cuivres']
 const THEMES = [{ v: 'auto', l: 'Auto' }, { v: 'clair', l: 'Clair' }, { v: 'sombre', l: 'Sombre' }]
@@ -97,12 +98,14 @@ export default function Parametres() {
   const handleSavePin = useCallback(() => {
     if (pinSection === 'delete') {
       save({ directorPin: '' })
+      saveDirectorPin('')
       resetPinForm()
       return
     }
     if (!pinNew.trim()) { setPinError('Le code ne peut pas être vide.'); return }
     save({ directorPin: pinNew.trim() })
-    setPinVisible(true)   // montre le code enregistré
+    saveDirectorPin(pinNew.trim())
+    setPinVisible(true)
     resetPinForm()
   }, [pinSection, pinNew, resetPinForm])
 

@@ -12,11 +12,14 @@ import useStore from '../store/index'
 import { subscribeSongs, subscribeSets, subscribeAppConfig, saveSong as fbSaveSong, saveSet as fbSaveSet } from '../lib/firebaseSync'
 import { FIREBASE_ENABLED as FB } from '../lib/firebase'
 
+
+
 export default function useFirebaseSync() {
   const setSongsFromCloud = useStore((s) => s.setSongsFromCloud)
   const setSetsFromCloud  = useStore((s) => s.setSetsFromCloud)
   const syncReady         = useStore((s) => s.syncReady)
   const setSyncReady      = useStore((s) => s.setSyncReady)
+  const updateSettings    = useStore((s) => s.updateSettings)
 
   const [migrating, setMigrating] = useState(false)
   const [migrateProgress, setMigrateProgress] = useState('')
@@ -79,7 +82,13 @@ export default function useFirebaseSync() {
       setSetsFromCloud(cloudSets)
     })
 
-    unsubConfig.current = subscribeAppConfig((cfg) => setAppConfig(cfg))
+    unsubConfig.current = subscribeAppConfig((cfg) => {
+      setAppConfig(cfg)
+      // Sync du PIN directeur vers le store local (partagé via Firebase pour tous les appareils)
+      if (typeof cfg.directorPin === 'string') {
+        updateSettings({ directorPin: cfg.directorPin })
+      }
+    })
 
     return () => {
       unsubSongs.current?.()
