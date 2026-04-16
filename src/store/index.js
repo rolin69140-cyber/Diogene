@@ -177,6 +177,8 @@ export const AUDIO_PREFIXES = [
   { prefix: 'Keyboard',       button: 'Clav',  pupitres: [] },
   { prefix: 'Accordéon',      button: 'Acc',   pupitres: [] },
   { prefix: 'Accordeon',      button: 'Acc',   pupitres: [] },
+  { prefix: 'Soliste',        button: 'Solo',  pupitres: [] },
+  { prefix: 'Soloist',        button: 'Solo',  pupitres: [] },
   // ── Voix numérotées (sans pupitre SATB) ───────────────────────────────────
   { prefix: 'Voix 1',   button: 'V1', pupitres: [] },
   { prefix: 'Voix 2',   button: 'V2', pupitres: [] },
