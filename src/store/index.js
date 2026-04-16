@@ -495,6 +495,7 @@ const useStore = create(
         modeScene: false,
         bgOpacity: 0.12,             // opacité du fond décoratif (0 = aucun, 1 = plein)
         directorPin: '',             // PIN chef de chœur (vide = non protégé)
+        lastBackupDate: null,        // ISO date de la dernière sauvegarde JSON
       },
 
       updateSettings: (updates) => set((s) => ({

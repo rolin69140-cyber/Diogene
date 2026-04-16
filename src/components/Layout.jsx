@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import useStore from '../store/index'
 import useFirebaseSync from '../hooks/useFirebaseSync'
@@ -12,13 +12,51 @@ const NAV_ITEMS = [
   { to: '/parametres',  label: 'Réglages',   icon: '⚙️'  },
 ]
 
+const BACKUP_INTERVAL_DAYS = 30
+
 export default function Layout({ children }) {
-  const modeScene = useStore((s) => s.settings.modeScene)
-  const theme     = useStore((s) => s.settings.theme)
+  const modeScene       = useStore((s) => s.settings.modeScene)
+  const theme           = useStore((s) => s.settings.theme)
+  const lastBackupDate  = useStore((s) => s.settings.lastBackupDate)
+  const updateSettings  = useStore((s) => s.updateSettings)
+  const exportConfig    = useStore((s) => s.exportConfig)
   const { syncReady, firebaseEnabled, migrating, migrateProgress, appConfig } = useFirebaseSync()
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
   const [bypassMaintenance, setBypassMaintenance] = useState(false)
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false)
+
+  // Vérifie une fois au montage si une sauvegarde mensuelle est due
+  useEffect(() => {
+    const now = Date.now()
+    const last = lastBackupDate ? new Date(lastBackupDate).getTime() : 0
+    const daysSince = (now - last) / (1000 * 60 * 60 * 24)
+    if (daysSince >= BACKUP_INTERVAL_DAYS) {
+      // Petit délai pour laisser l'appli se charger avant d'afficher le popup
+      const t = setTimeout(() => setShowBackupPrompt(true), 1500)
+      return () => clearTimeout(t)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleBackupYes = () => {
+    const json = exportConfig()
+    const blob = new Blob([json], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `diogene-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    updateSettings({ lastBackupDate: new Date().toISOString() })
+    setShowBackupPrompt(false)
+  }
+
+  const handleBackupNo = () => {
+    // Reporte d'une semaine pour ne pas re-demander tout de suite
+    const inOneWeek = new Date(Date.now() - (BACKUP_INTERVAL_DAYS - 7) * 24 * 60 * 60 * 1000).toISOString()
+    updateSettings({ lastBackupDate: inOneWeek })
+    setShowBackupPrompt(false)
+  }
 
   const darkClass =
     theme === 'sombre' ? 'dark' :
@@ -126,6 +164,38 @@ export default function Layout({ children }) {
           </NavLink>
         ))}
       </nav>
+
+      {/* Popup sauvegarde mensuelle */}
+      {showBackupPrompt && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-xs w-full text-center">
+            <div className="text-3xl mb-3">💾</div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              Sauvegarde mensuelle
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+              {lastBackupDate
+                ? `Dernière sauvegarde le ${new Date(lastBackupDate).toLocaleDateString('fr-FR')}.`
+                : 'Aucune sauvegarde effectuée.'
+              }{' '}Voulez-vous sauvegarder la bibliothèque maintenant ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleBackupNo}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400"
+              >
+                Plus tard
+              </button>
+              <button
+                onClick={handleBackupYes}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
+              >
+                Sauvegarder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
