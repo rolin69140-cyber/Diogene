@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/index'
 import useLibrary from '../hooks/useLibrary'
 import { saveBgImage, deleteBgImage, loadBgImage } from '../lib/bgImageStore'
+import { exportFullZip, importFullZip } from '../lib/fullBackup'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe', 'cuivres']
 const THEMES = [{ v: 'auto', l: 'Auto' }, { v: 'clair', l: 'Clair' }, { v: 'sombre', l: 'Sombre' }]
@@ -11,10 +12,48 @@ const METRO_SOUNDS = [{ v: 'clic', l: 'Clic' }, { v: 'bois', l: 'Bois' }, { v: '
 export default function Parametres() {
   const settings       = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
+  const exportConfig   = useStore((s) => s.exportConfig)
+  const importConfig   = useStore((s) => s.importConfig)
   const { exportToFile, importFromFile } = useLibrary()
 
   const [saved, setSaved] = useState(false)
   const timerRef = useRef(null)
+
+  // ── Sauvegarde complète ZIP ─────────────────────────────────────────────
+  const [zipProgress, setZipProgress] = useState(null) // null | string
+
+  const handleExportZip = useCallback(async () => {
+    setZipProgress('Préparation…')
+    try {
+      const blob = await exportFullZip(exportConfig, setZipProgress)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `diogene-complet-${new Date().toISOString().slice(0, 10)}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+      updateSettings({ lastBackupDate: new Date().toISOString() })
+    } catch (e) {
+      alert('Erreur lors de la sauvegarde : ' + e.message)
+    } finally {
+      setZipProgress(null)
+    }
+  }, [exportConfig, updateSettings])
+
+  const handleImportZip = useCallback(async (file) => {
+    if (!file) return
+    if (!confirm('Restaurer cette sauvegarde ? Tout le contenu actuel sera remplacé.')) return
+    setZipProgress('Lecture…')
+    try {
+      await importFullZip(file, importConfig, setZipProgress)
+      alert('Restauration réussie ! L\'appli va se recharger.')
+      window.location.reload()
+    } catch (e) {
+      alert('Erreur : ' + e.message)
+    } finally {
+      setZipProgress(null)
+    }
+  }, [importConfig])
 
   // ── Fonds personnalisés ─────────────────────────────────────────────────
   const [bgVersion, setBgVersion] = useState(0)
@@ -420,7 +459,36 @@ export default function Parametres() {
       {/* Données */}
       <section className="mb-6">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Données</h2>
+
+        {/* Sauvegarde complète ZIP */}
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3 mb-3">
+          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-2">Sauvegarde complète (sons + PDF + config)</p>
+          {zipProgress ? (
+            <p className="text-xs text-center text-blue-500 py-2 animate-pulse">{zipProgress}</p>
+          ) : (
+            <div className="space-y-2">
+              <button
+                onClick={handleExportZip}
+                className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium"
+              >
+                📦 Exporter tout (ZIP)
+              </button>
+              <label className="w-full py-3 rounded-xl border border-blue-300 dark:border-blue-700 text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center justify-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40">
+                📂 Restaurer depuis un ZIP
+                <input
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  onChange={(e) => handleImportZip(e.target.files[0])}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Config JSON seulement */}
         <div className="space-y-2">
+          <p className="text-xs text-gray-400 mb-1">Config uniquement (sans les fichiers)</p>
           <button
             onClick={exportToFile}
             className="w-full py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"

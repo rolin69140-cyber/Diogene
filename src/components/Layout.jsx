@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import useStore from '../store/index'
 import useFirebaseSync from '../hooks/useFirebaseSync'
+import { exportFullZip } from '../lib/fullBackup'
 
 const NAV_ITEMS = [
   { to: '/',            label: 'Accueil',    icon: '🏠' },
@@ -38,17 +39,25 @@ export default function Layout({ children }) {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleBackupYes = () => {
-    const json = exportConfig()
-    const blob = new Blob([json], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `diogene-export-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    updateSettings({ lastBackupDate: new Date().toISOString() })
-    setShowBackupPrompt(false)
+  const [backupProgress, setBackupProgress] = useState(null)
+
+  const handleBackupYes = async () => {
+    setBackupProgress('Préparation…')
+    try {
+      const blob = await exportFullZip(exportConfig, setBackupProgress)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `diogene-complet-${new Date().toISOString().slice(0, 10)}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+      updateSettings({ lastBackupDate: new Date().toISOString() })
+    } catch (e) {
+      alert('Erreur lors de la sauvegarde : ' + e.message)
+    } finally {
+      setBackupProgress(null)
+      setShowBackupPrompt(false)
+    }
   }
 
   const handleBackupNo = () => {
@@ -179,20 +188,24 @@ export default function Layout({ children }) {
                 : 'Aucune sauvegarde effectuée.'
               }{' '}Voulez-vous sauvegarder la bibliothèque maintenant ?
             </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleBackupNo}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400"
-              >
-                Plus tard
-              </button>
-              <button
-                onClick={handleBackupYes}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
-              >
-                Sauvegarder
-              </button>
-            </div>
+            {backupProgress ? (
+              <p className="text-sm text-blue-500 animate-pulse py-1">{backupProgress}</p>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={handleBackupNo}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400"
+                >
+                  Plus tard
+                </button>
+                <button
+                  onClick={handleBackupYes}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
+                >
+                  Sauvegarder
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
