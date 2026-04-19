@@ -223,7 +223,7 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   // ── Rendu config ──────────────────────────────────────────────────────────
   if (screen === 'config') {
     return (
-      <div className="fixed inset-0 z-[150] flex flex-col bg-white dark:bg-gray-950">
+      <div className="fixed inset-0 z-[150] flex flex-col bg-white dark:bg-gray-950 md:ml-16">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
           <button onClick={onClose} className="text-gray-500 text-sm px-2 py-1">✕</button>
@@ -288,7 +288,7 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
 
   // ── Rendu lecture ─────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-[150] flex flex-col bg-gray-950 text-white">
+    <div className="fixed inset-0 z-[150] flex flex-col bg-gray-950 text-white md:ml-16">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <button onClick={() => { audioRef.current?.pause(); clearGap(); onClose() }} className="text-gray-400 text-sm">✕</button>
