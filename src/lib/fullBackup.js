@@ -15,13 +15,18 @@ function openDB() {
 }
 
 async function getAllFromStore(storeName) {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx  = db.transaction(storeName, 'readonly')
-    const req = tx.objectStore(storeName).getAll()
-    req.onsuccess = () => resolve(req.result || [])
-    req.onerror   = () => reject(req.error)
-  })
+  try {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(storeName, 'readonly')
+      const req = tx.objectStore(storeName).getAll()
+      req.onsuccess = () => resolve(req.result || [])
+      req.onerror   = () => reject(req.error)
+    })
+  } catch (e) {
+    console.warn('[fullBackup] IndexedDB inaccessible :', e.message)
+    return [] // IndexedDB bloqué (mode privé, cookies désactivés) → on ignore
+  }
 }
 
 async function putToStore(storeName, item) {
@@ -44,6 +49,21 @@ export async function exportFullZip(exportConfig, onProgress) {
 
   onProgress?.('Lecture des PDF…')
   const pdfFiles = await getAllFromStore('pdfFiles')
+
+  // Si aucun fichier local (tout est sur Firebase Storage), on fait un ZIP config seul
+  // avec une note explicative — les fichiers sont déjà sauvegardés dans le cloud
+  if (audioFiles.length === 0 && pdfFiles.length === 0) {
+    zip.file('config.json', exportConfig())
+    zip.file('README.txt', [
+      'Sauvegarde Diogène — config uniquement',
+      '',
+      'Les fichiers audio et PDF sont stockés dans Firebase Storage (cloud).',
+      'Ils sont automatiquement disponibles au rechargement de l\'application.',
+      'Ce fichier ZIP contient uniquement la configuration (chants, sets, réglages).',
+    ].join('\n'))
+    onProgress?.('Compression…')
+    return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } })
+  }
 
   // Manifeste avec métadonnées (nom, type) des fichiers binaires
   zip.file('manifest.json', JSON.stringify({
