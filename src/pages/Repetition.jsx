@@ -6,6 +6,7 @@ import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
 import NotesModal from '../components/NotesModal'
 import DirectorNotesModal from '../components/DirectorNotesModal'
+import SetPlaybackModal from '../components/SetPlaybackModal'
 import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/attackSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
@@ -38,6 +39,7 @@ export default function Repetition() {
   const [activeSetId, setActiveSetId] = useState(null)
   const [notesSongId, setNotesSongId]         = useState(null) // modal prise de notes
   const [directorSongId, setDirectorSongId]   = useState(null) // modal chef de chœur
+  const [playbackSetId, setPlaybackSetId]     = useState(null) // lecture enchaînée
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
   const [showCueText, setShowCueText] = useState(false)
   const customBg = useBgImage('bg_repetition')
@@ -277,13 +279,19 @@ export default function Repetition() {
               }`}
             >Tous</button>
             {sets.map((set) => (
-              <button
-                key={set.id}
-                onClick={() => setActiveSetId(activeSetId === set.id ? null : set.id)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeSetId === set.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-                }`}
-              >{set.name}</button>
+              <div key={set.id} className="flex-shrink-0 flex items-center gap-1">
+                <button
+                  onClick={() => setActiveSetId(activeSetId === set.id ? null : set.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    activeSetId === set.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                  }`}
+                >{set.name}</button>
+                <button
+                  onClick={() => setPlaybackSetId(set.id)}
+                  className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs flex items-center justify-center"
+                  title="Lecture enchaînée"
+                >▶</button>
+              </div>
             ))}
           </div>
         )}
@@ -377,6 +385,17 @@ export default function Repetition() {
       {directorSongId && (
         <DirectorNotesModal songId={directorSongId} onClose={() => setDirectorSongId(null)} />
       )}
+      {playbackSetId && (() => {
+        const set = sets.find((s) => s.id === playbackSetId)
+        return set ? (
+          <SetPlaybackModal
+            set={set}
+            songs={songs}
+            userPupitre={settings.pupitre}
+            onClose={() => setPlaybackSetId(null)}
+          />
+        ) : null
+      })()}
       </div>
     </div>
   )
