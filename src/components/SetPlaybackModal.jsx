@@ -313,15 +313,36 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
           </p>
         )}
 
-        {/* Barre de progression */}
+        {/* Barre de progression — cliquable/glissable pour se déplacer */}
         <div className="w-full max-w-sm mb-2">
-          <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 rounded-full transition-all"
-              style={{ width: duration > 0 ? `${(elapsed / duration) * 100}%` : '0%' }}
-            />
+          <div
+            className="h-4 flex items-center cursor-pointer group"
+            onPointerDown={(e) => {
+              if (!duration) return
+              e.currentTarget.setPointerCapture(e.pointerId)
+              const seek = (ev) => {
+                const rect = ev.currentTarget.getBoundingClientRect()
+                const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
+                if (audioRef.current) audioRef.current.currentTime = ratio * duration
+              }
+              seek(e)
+              const onMove = (ev) => seek(ev)
+              const onUp = () => {
+                e.currentTarget.removeEventListener('pointermove', onMove)
+                e.currentTarget.removeEventListener('pointerup', onUp)
+              }
+              e.currentTarget.addEventListener('pointermove', onMove)
+              e.currentTarget.addEventListener('pointerup', onUp)
+            }}
+          >
+            <div className="relative w-full h-1.5 bg-gray-700 rounded-full overflow-hidden group-hover:h-2.5 transition-all">
+              <div
+                className="h-full bg-blue-500 rounded-full"
+                style={{ width: duration > 0 ? `${(elapsed / duration) * 100}%` : '0%' }}
+              />
+            </div>
           </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <div className="flex justify-between text-xs text-gray-500 mt-0.5">
             <span>{fmt(elapsed)}</span>
             <span>{fmt(duration)}</span>
           </div>
