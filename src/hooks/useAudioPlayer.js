@@ -168,24 +168,22 @@ export default function useAudioPlayer() {
         audio.onerror = resolve
       })
     } else if (storageUrl) {
-      // iOS Safari : URL directe, pas de fetch+blob
+      // URL Firebase Storage : on set le src et on laisse les events mettre à jour la durée
+      // Ne PAS attendre loadedmetadata (comportement variable iOS/Android)
       audio.preload = 'metadata'
       audio.src = storageUrl
-      await new Promise((resolve) => {
-        const tid = setTimeout(resolve, 3000) // iOS peut ne jamais déclencher loadedmetadata
-        audio.onloadedmetadata = () => {
-          clearTimeout(tid)
-          const dur = audio.duration
-          if (dur && isFinite(dur)) {
-            setDuration(dur)
-            setSegmentEnd(dur);  segEndRef.current = dur
-          }
-          setSegmentStart(0);  segStartRef.current = 0
-          setCurrentTime(0)
-          resolve()
+      setSegmentStart(0);  segStartRef.current = 0
+      setCurrentTime(0)
+      // Listener one-shot pour mettre à jour la durée dès qu'elle est connue
+      const onMeta = () => {
+        const dur = audio.duration
+        if (dur && isFinite(dur)) {
+          setDuration(dur)
+          setSegmentEnd(dur);  segEndRef.current = dur
         }
-        audio.onerror = () => { clearTimeout(tid); resolve() }
-      })
+      }
+      audio.addEventListener('loadedmetadata', onMeta, { once: true })
+      audio.addEventListener('durationchange', onMeta, { once: true })
     } else {
       setLoadError(true)
       loadErrorRef.current = true
