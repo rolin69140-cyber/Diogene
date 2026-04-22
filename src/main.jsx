@@ -8,6 +8,15 @@ window.addEventListener('unhandledrejection', (e) => {
     window.location.reload()
   }
 })
+
+// Rechargement automatique quand le service worker se met à jour
+// (skipWaiting + clientsClaim activent le nouveau SW immédiatement,
+//  ce listener recharge la page pour que l'utilisateur voie la nouvelle version)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload()
+  })
+}
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'

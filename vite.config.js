@@ -30,6 +30,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,      // active le nouveau SW sans attendre la fermeture des onglets
+        clientsClaim: true,     // le nouveau SW prend le contrôle de tous les clients immédiatement
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
         runtimeCaching: [
           {
