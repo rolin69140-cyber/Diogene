@@ -189,34 +189,39 @@ export default function useAudioPlayer() {
           setLoadError(true); loadErrorRef.current = true
         }, { once: true })
       } else {
-        // Android/desktop : fetch → blob (contourne les problèmes de preload)
-        try {
-          const resp = await fetch(storageUrl)
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-          const arrayBuf = await resp.arrayBuffer()
-          const mime = resp.headers.get('content-type') || 'audio/mpeg'
-          const blob = new Blob([arrayBuf], { type: mime })
-          blobUrlRef.current = URL.createObjectURL(blob)
-          audio.src = blobUrlRef.current
-          audio.load()
-          await new Promise((resolve) => {
-            audio.onloadedmetadata = () => {
-              const dur = audio.duration
+        // Android/desktop : URL directe + listeners robustes
+        audio.preload = 'auto'
+        audio.src = storageUrl
+        setSegmentStart(0);  segStartRef.current = 0
+        setCurrentTime(0)
+
+        await new Promise((resolve) => {
+          const onDur = () => {
+            const dur = audio.duration
+            if (dur && isFinite(dur)) {
               setDuration(dur)
               setSegmentEnd(dur);  segEndRef.current = dur
-              setSegmentStart(0);  segStartRef.current = 0
-              setCurrentTime(0)
-              resolve()
             }
-            audio.onerror = resolve
-            setTimeout(resolve, 5000)
-          })
-        } catch (e) {
-          console.warn('[AudioPlayer] fetch storageUrl failed:', e)
-          setLoadError(true)
-          loadErrorRef.current = true
-          return false
-        }
+            resolve()
+          }
+          audio.addEventListener('loadedmetadata', onDur, { once: true })
+          audio.addEventListener('canplay', onDur, { once: true })
+          audio.addEventListener('durationchange', () => {
+            const dur = audio.duration
+            if (dur && isFinite(dur)) {
+              setDuration(dur)
+              setSegmentEnd(dur);  segEndRef.current = dur
+            }
+          }, { once: true })
+          audio.addEventListener('error', () => {
+            console.warn('[AudioPlayer] audio error:', audio.error)
+            setLoadError(true)
+            loadErrorRef.current = true
+            resolve()
+          }, { once: true })
+          // Timeout : on laisse play() tenter sa chance même sans métadonnées
+          setTimeout(resolve, 3000)
+        })
       }
     } else {
       setLoadError(true)
