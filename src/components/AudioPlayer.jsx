@@ -133,9 +133,18 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4">×</button>
           </div>
           <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-700 rounded-xl p-4 text-sm text-orange-800 dark:text-orange-200">
-            <p className="font-semibold mb-1">⚠️ Fichier audio non disponible</p>
-            <p>Ce fichier n'est pas présent sur cet appareil et n'a pas encore été envoyé dans le cloud.</p>
-            <p className="mt-2 text-xs opacity-70">Ré-importez les fichiers MP3 depuis la Librairie sur le Mac pour les rendre disponibles partout.</p>
+            <p className="font-semibold mb-1">⚠️ Impossible de lire le fichier</p>
+            <p>Le fichier n'a pas pu être chargé sur cet appareil.</p>
+            {button?.storageUrl && (
+              <a
+                href={button.storageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium"
+              >
+                Ouvrir dans le navigateur ↗
+              </a>
+            )}
           </div>
         </div>
       </div>

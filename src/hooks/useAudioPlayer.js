@@ -169,12 +169,11 @@ export default function useAudioPlayer() {
       })
     } else if (storageUrl) {
       // URL Firebase Storage : on set le src et on laisse les events mettre à jour la durée
-      // Ne PAS attendre loadedmetadata (comportement variable iOS/Android)
-      audio.preload = 'metadata'
+      audio.preload = 'auto'
       audio.src = storageUrl
       setSegmentStart(0);  segStartRef.current = 0
       setCurrentTime(0)
-      // Listener one-shot pour mettre à jour la durée dès qu'elle est connue
+      // Durée mise à jour dès qu'elle est connue
       const onMeta = () => {
         const dur = audio.duration
         if (dur && isFinite(dur)) {
@@ -184,6 +183,12 @@ export default function useAudioPlayer() {
       }
       audio.addEventListener('loadedmetadata', onMeta, { once: true })
       audio.addEventListener('durationchange', onMeta, { once: true })
+      // Erreur de chargement (réseau, CORS, URL invalide…)
+      audio.addEventListener('error', () => {
+        console.warn('[AudioPlayer] storageUrl load error:', audio.error)
+        setLoadError(true)
+        loadErrorRef.current = true
+      }, { once: true })
     } else {
       setLoadError(true)
       loadErrorRef.current = true

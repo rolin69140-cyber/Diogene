@@ -130,9 +130,20 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '' })
   }, [zoom])
 
   if (error) return (
-    <div className="flex flex-col items-center justify-center py-10 text-gray-400 gap-2">
-      <span className="text-3xl">⚠️</span>
-      <p className="text-sm">{error}</p>
+    <div className="flex flex-col items-center justify-center py-10 text-gray-500 gap-3">
+      <span className="text-3xl">📄</span>
+      <p className="text-sm">{label || 'PDF'}</p>
+      {url && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm active:scale-95 transition-transform shadow"
+        >
+          Ouvrir le PDF ↗
+        </a>
+      )}
+      <p className="text-xs opacity-40 text-center">S'ouvre dans le navigateur</p>
     </div>
   )
 
