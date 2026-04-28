@@ -294,7 +294,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
           </div>
           <input
             type="range"
-            min="0.5"
+            min="0.75"
             max="1"
             step="0.01"
             value={player.speed}
