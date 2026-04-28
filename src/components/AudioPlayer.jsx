@@ -206,49 +206,31 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             />
             {/* Handle début de segment */}
             <div
-              className="absolute top-0 bottom-0 w-8 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center"
+              className="absolute top-0 bottom-0 w-12 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center touch-none"
               style={{ left: `${segStartPct}%` }}
               onPointerDown={(e) => {
                 e.stopPropagation()
-                e.currentTarget.setPointerCapture(e.pointerId)
+                e.preventDefault()
+                progressBarRef.current?.setPointerCapture(e.pointerId)
                 isDraggingRef.current = 'segStart'
               }}
-              onPointerMove={(e) => {
-                if (isDraggingRef.current !== 'segStart') return
-                const bar = progressBarRef.current
-                if (!bar) return
-                const rect = bar.getBoundingClientRect()
-                const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-                const t = pct * player.duration
-                player.setSegment(Math.min(t, (player.segmentEnd ?? player.duration) - 0.5), player.segmentEnd)
-              }}
-              onPointerUp={() => { isDraggingRef.current = null }}
             >
               <div className="w-0.5 h-full bg-green-500 shadow" />
-              <div className="absolute bottom-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow" />
+              <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg" />
             </div>
             {/* Handle fin de segment */}
             <div
-              className="absolute top-0 bottom-0 w-8 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center"
+              className="absolute top-0 bottom-0 w-12 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center touch-none"
               style={{ left: `${segEndPct}%` }}
               onPointerDown={(e) => {
                 e.stopPropagation()
-                e.currentTarget.setPointerCapture(e.pointerId)
+                e.preventDefault()
+                progressBarRef.current?.setPointerCapture(e.pointerId)
                 isDraggingRef.current = 'segEnd'
               }}
-              onPointerMove={(e) => {
-                if (isDraggingRef.current !== 'segEnd') return
-                const bar = progressBarRef.current
-                if (!bar) return
-                const rect = bar.getBoundingClientRect()
-                const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-                const t = pct * player.duration
-                player.setSegment(player.segmentStart, Math.max(t, player.segmentStart + 0.5))
-              }}
-              onPointerUp={() => { isDraggingRef.current = null }}
             >
               <div className="w-0.5 h-full bg-green-500 shadow" />
-              <div className="absolute bottom-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow" />
+              <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg" />
             </div>
             {/* Marqueurs */}
             {markers.map((m) => (
