@@ -168,27 +168,34 @@ export default function useAudioPlayer() {
         audio.onerror = resolve
       })
     } else if (storageUrl) {
-      // URL Firebase Storage : on set le src et on laisse les events mettre à jour la durée
-      audio.preload = 'auto'
-      audio.src = storageUrl
-      setSegmentStart(0);  segStartRef.current = 0
-      setCurrentTime(0)
-      // Durée mise à jour dès qu'elle est connue
-      const onMeta = () => {
-        const dur = audio.duration
-        if (dur && isFinite(dur)) {
-          setDuration(dur)
-          setSegmentEnd(dur);  segEndRef.current = dur
-        }
-      }
-      audio.addEventListener('loadedmetadata', onMeta, { once: true })
-      audio.addEventListener('durationchange', onMeta, { once: true })
-      // Erreur de chargement (réseau, CORS, URL invalide…)
-      audio.addEventListener('error', () => {
-        console.warn('[AudioPlayer] storageUrl load error:', audio.error)
+      // Fetch → blob : contourne les problèmes de preload/CORS sur Android
+      try {
+        const resp = await fetch(storageUrl)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const arrayBuf = await resp.arrayBuffer()
+        const mime = resp.headers.get('content-type') || 'audio/mpeg'
+        const blob = new Blob([arrayBuf], { type: mime })
+        blobUrlRef.current = URL.createObjectURL(blob)
+        audio.src = blobUrlRef.current
+        audio.load()
+        await new Promise((resolve) => {
+          audio.onloadedmetadata = () => {
+            const dur = audio.duration
+            setDuration(dur)
+            setSegmentEnd(dur);  segEndRef.current = dur
+            setSegmentStart(0);  segStartRef.current = 0
+            setCurrentTime(0)
+            resolve()
+          }
+          audio.onerror = resolve
+          setTimeout(resolve, 5000) // fallback si loadedmetadata ne se déclenche jamais
+        })
+      } catch (e) {
+        console.warn('[AudioPlayer] fetch storageUrl failed:', e)
         setLoadError(true)
         loadErrorRef.current = true
-      }, { once: true })
+        return false
+      }
     } else {
       setLoadError(true)
       loadErrorRef.current = true
