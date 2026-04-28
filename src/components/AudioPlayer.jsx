@@ -4,7 +4,7 @@ import useAudioPlayer from '../hooks/useAudioPlayer'
 import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
 
-const SPEEDS = [1, 0.75, 0.5]
+const SPEEDS = [1, 0.85, 0.75]
 const TRANSPOSES = [
   { label: '−1T', value: -2 },
   { label: '−½T', value: -1 },
@@ -279,8 +279,10 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
         {/* Vitesse */}
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5">Vitesse</p>
-          <div className="flex gap-2">
+          <p className="text-xs text-gray-500 mb-1.5">
+            Vitesse <span className="text-blue-500 font-medium">× {player.speed.toFixed(2).replace(/\.?0+$/, '')}</span>
+          </p>
+          <div className="flex gap-2 mb-2">
             {SPEEDS.map((s) => (
               <button
                 key={s}
@@ -290,6 +292,15 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
               >× {s}</button>
             ))}
           </div>
+          <input
+            type="range"
+            min="0.5"
+            max="1"
+            step="0.01"
+            value={player.speed}
+            onChange={(e) => player.changeSpeed(parseFloat(e.target.value))}
+            className="w-full accent-blue-600 h-2 cursor-pointer"
+          />
         </div>
 
         {/* Transposition */}
