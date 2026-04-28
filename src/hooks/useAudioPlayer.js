@@ -168,33 +168,55 @@ export default function useAudioPlayer() {
         audio.onerror = resolve
       })
     } else if (storageUrl) {
-      // Fetch → blob : contourne les problèmes de preload/CORS sur Android
-      try {
-        const resp = await fetch(storageUrl)
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const arrayBuf = await resp.arrayBuffer()
-        const mime = resp.headers.get('content-type') || 'audio/mpeg'
-        const blob = new Blob([arrayBuf], { type: mime })
-        blobUrlRef.current = URL.createObjectURL(blob)
-        audio.src = blobUrlRef.current
-        audio.load()
-        await new Promise((resolve) => {
-          audio.onloadedmetadata = () => {
-            const dur = audio.duration
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+
+      if (isIOS) {
+        // iOS Safari : URL directe (fetch bloqué par CORS/restrictions PWA)
+        audio.preload = 'metadata'
+        audio.src = storageUrl
+        setSegmentStart(0);  segStartRef.current = 0
+        setCurrentTime(0)
+        const onMeta = () => {
+          const dur = audio.duration
+          if (dur && isFinite(dur)) {
             setDuration(dur)
             setSegmentEnd(dur);  segEndRef.current = dur
-            setSegmentStart(0);  segStartRef.current = 0
-            setCurrentTime(0)
-            resolve()
           }
-          audio.onerror = resolve
-          setTimeout(resolve, 5000) // fallback si loadedmetadata ne se déclenche jamais
-        })
-      } catch (e) {
-        console.warn('[AudioPlayer] fetch storageUrl failed:', e)
-        setLoadError(true)
-        loadErrorRef.current = true
-        return false
+        }
+        audio.addEventListener('loadedmetadata', onMeta, { once: true })
+        audio.addEventListener('durationchange', onMeta, { once: true })
+        audio.addEventListener('error', () => {
+          setLoadError(true); loadErrorRef.current = true
+        }, { once: true })
+      } else {
+        // Android/desktop : fetch → blob (contourne les problèmes de preload)
+        try {
+          const resp = await fetch(storageUrl)
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+          const arrayBuf = await resp.arrayBuffer()
+          const mime = resp.headers.get('content-type') || 'audio/mpeg'
+          const blob = new Blob([arrayBuf], { type: mime })
+          blobUrlRef.current = URL.createObjectURL(blob)
+          audio.src = blobUrlRef.current
+          audio.load()
+          await new Promise((resolve) => {
+            audio.onloadedmetadata = () => {
+              const dur = audio.duration
+              setDuration(dur)
+              setSegmentEnd(dur);  segEndRef.current = dur
+              setSegmentStart(0);  segStartRef.current = 0
+              setCurrentTime(0)
+              resolve()
+            }
+            audio.onerror = resolve
+            setTimeout(resolve, 5000)
+          })
+        } catch (e) {
+          console.warn('[AudioPlayer] fetch storageUrl failed:', e)
+          setLoadError(true)
+          loadErrorRef.current = true
+          return false
+        }
       }
     } else {
       setLoadError(true)
