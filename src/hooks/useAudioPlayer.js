@@ -102,18 +102,20 @@ export default function useAudioPlayer() {
     if (toneReadyRef.current) return
     const audio = getAudio()
 
-    // MediaElementAudioSourceNode exige une URL same-origin (blob:) —
-    // les URLs Firebase cross-origin bloquent silencieusement le son.
-    // Si l'audio est sur une URL distante, on le fetch en blob d'abord.
+    // Si l'audio est sur une URL Firebase (cross-origin), fetch → blob
+    // MediaElementAudioSourceNode exige same-origin sinon silence total
+    let wasPlaying = false
+    let pos = 0
     if (audio.src && !audio.src.startsWith('blob:')) {
+      wasPlaying = !audio.paused
+      pos = audio.currentTime
+      audio.pause()
       try {
         const resp = await fetch(audio.src)
         if (resp.ok) {
           const buf  = await resp.arrayBuffer()
           const mime = resp.headers.get('content-type') || 'audio/mpeg'
           const blob = new Blob([buf], { type: mime })
-          const wasPlaying = !audio.paused
-          const pos = audio.currentTime
           if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
           blobUrlRef.current = URL.createObjectURL(blob)
           audio.src = blobUrlRef.current
@@ -124,16 +126,13 @@ export default function useAudioPlayer() {
             setTimeout(resolve, 3000)
           })
           audio.currentTime = pos
-          if (wasPlaying) audio.play().catch(() => {})
         }
       } catch (e) {
-        console.warn('[AudioPlayer] fetch pour blob avant Tone:', e)
+        console.warn('[AudioPlayer] fetch blob pour Tone:', e)
       }
     }
 
-    // Tone.start() — synchrone pour iOS (pas d'await qui casse le geste)
-    Tone.start()
-
+    // Créer la chaîne Tone (PitchShift → destination)
     if (!pitchShiftRef.current) {
       pitchShiftRef.current = new Tone.PitchShift({
         pitch: transposeRef.current,
@@ -144,13 +143,19 @@ export default function useAudioPlayer() {
       pitchShiftRef.current.toDestination()
     }
 
+    // Capturer l'HTMLAudio dans Web Audio (1 seule fois par élément)
     if (!mediaSourceRef.current) {
       const rawCtx = Tone.getContext().rawContext
       mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
     }
-
     mediaSourceRef.current.connect(pitchShiftRef.current.input)
     toneReadyRef.current = true
+
+    // Reprendre la lecture APRÈS que la chaîne est branchée
+    if (wasPlaying) {
+      await Tone.start()
+      audio.play().catch(() => {})
+    }
   }, [getAudio])
 
   // ── Chargement fichier ────────────────────────────────────────────────────
@@ -336,10 +341,11 @@ export default function useAudioPlayer() {
     setTranspose(semitones)
     transposeRef.current = semitones
 
-    // Branchement Tone (1re fois uniquement — dans le geste utilisateur = OK iOS)
+    // Tone.start() SYNCHRONE dès le geste — iOS exige que le resume soit dans le handler direct
+    Tone.start()
+
     await setupToneChain()
 
-    // Changer le pitch à la volée, sans interrompre la lecture
     if (pitchShiftRef.current) {
       pitchShiftRef.current.pitch = semitones
     }
