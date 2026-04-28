@@ -102,31 +102,54 @@ export default function useAudioPlayer() {
     if (toneReadyRef.current) return
     const audio = getAudio()
 
-    // Tone.start() résume l'AudioContext (exigé par iOS dans un geste)
-    await Tone.start()
+    // MediaElementAudioSourceNode exige une URL same-origin (blob:) —
+    // les URLs Firebase cross-origin bloquent silencieusement le son.
+    // Si l'audio est sur une URL distante, on le fetch en blob d'abord.
+    if (audio.src && !audio.src.startsWith('blob:')) {
+      try {
+        const resp = await fetch(audio.src)
+        if (resp.ok) {
+          const buf  = await resp.arrayBuffer()
+          const mime = resp.headers.get('content-type') || 'audio/mpeg'
+          const blob = new Blob([buf], { type: mime })
+          const wasPlaying = !audio.paused
+          const pos = audio.currentTime
+          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+          blobUrlRef.current = URL.createObjectURL(blob)
+          audio.src = blobUrlRef.current
+          audio.load()
+          await new Promise((resolve) => {
+            audio.onloadedmetadata = resolve
+            audio.onerror = resolve
+            setTimeout(resolve, 3000)
+          })
+          audio.currentTime = pos
+          if (wasPlaying) audio.play().catch(() => {})
+        }
+      } catch (e) {
+        console.warn('[AudioPlayer] fetch pour blob avant Tone:', e)
+      }
+    }
 
-    // PitchShift (pitch en demi-tons, windowSize petit = moins de latence)
+    // Tone.start() — synchrone pour iOS (pas d'await qui casse le geste)
+    Tone.start()
+
     if (!pitchShiftRef.current) {
       pitchShiftRef.current = new Tone.PitchShift({
         pitch: transposeRef.current,
-        windowSize: 0.1,   // 100ms — bon compromis qualité/latence
+        windowSize: 0.1,
         delayTime: 0,
         feedback: 0,
       })
       pitchShiftRef.current.toDestination()
     }
 
-    // MediaElementAudioSourceNode — capture l'HTMLAudio dans le contexte Tone
-    // À partir de là, l'audio NE PASSE PLUS par le haut-parleur par défaut
-    // il faut obligatoirement le connecter à la destination Tone
     if (!mediaSourceRef.current) {
       const rawCtx = Tone.getContext().rawContext
       mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
     }
 
-    // audio → PitchShift → haut-parleur
     mediaSourceRef.current.connect(pitchShiftRef.current.input)
-
     toneReadyRef.current = true
   }, [getAudio])
 
