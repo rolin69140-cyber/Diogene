@@ -202,8 +202,11 @@ export default function useAudioPlayer() {
 
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
 
-    // Réinitialiser crossOrigin : par défaut pas de CORS (sera ajouté si transposition activée)
-    audio.crossOrigin = ''
+    // Supprimer crossOrigin complètement — '' est équivalent à 'anonymous' et force
+    // un header Origin sur la requête audio. Firebase Storage sans CORS configuré
+    // rejette alors la requête → audio error → "Impossible de lire le fichier".
+    // crossOrigin sera ajouté uniquement dans setupToneChain (transposition).
+    audio.removeAttribute('crossOrigin')
 
     const record = await getAudioFile(fileId)
     console.log(`[Audio] loadFile(${fileId}) — IndexedDB:`, record ? `trouvé (${record.type}, ${record.data?.byteLength ?? '?'} bytes)` : 'non trouvé', '| storageUrl:', storageUrl ?? 'aucune')
