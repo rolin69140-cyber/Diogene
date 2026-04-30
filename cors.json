@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://diogene-aa3b.vercel.app",
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Range", "Content-Length", "Accept-Ranges"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -1,3 +1,8 @@
+# Variables d'environnement (clés secrètes)
+.env.local
+.env.*.local
+.env
+
 # Logs
 logs
 *.log
@@ -29,3 +34,4 @@ Design sans titre*
 !index.html
 logo_diogene.*
 "Logo Diogène.*"
+.vercel

@@ -52,10 +52,12 @@ export default function useAudioPlayer() {
   const getAudio = useCallback(() => {
     if (!audioRef.current) {
       const a = new Audio()
+      // ✅ iOS + ✅ Android : preservesPitch empêche la variation de tonalité avec playbackRate
+      // On NE SET PAS crossOrigin ici par défaut — voir setupToneChain pour l'explication
       a.preservesPitch = true
-      a.mozPreservesPitch = true
-      a.webkitPreservesPitch = true
-      // Fin naturelle de lecture
+      a.mozPreservesPitch = true          // ✅ Android Firefox (préventif)
+      a.webkitPreservesPitch = true       // ✅ iOS Safari (préventif)
+
       a.addEventListener('ended', () => {
         if (loopRef.current) {
           a.currentTime = segStartRef.current
@@ -86,7 +88,6 @@ export default function useAudioPlayer() {
       const pos    = audio.currentTime
       const endPos = segEndRef.current ?? audio.duration ?? Infinity
       setCurrentTime(pos)
-      // Boucle de segment (segEnd < durée totale)
       if (isFinite(endPos) && pos >= endPos - 0.05 && loopRef.current) {
         audio.currentTime = segStartRef.current
       }
@@ -95,44 +96,70 @@ export default function useAudioPlayer() {
     rafRef.current = requestAnimationFrame(tick)
   }, [stopRaf])
 
-  // ── Tone.js : branchement MediaElement → PitchShift (1 seule fois) ────────
-  // Doit être appelé dans un geste utilisateur (tap) pour iOS Safari
+  // ── Tone.js : branchement MediaElement → PitchShift ──────────────────────
+  //
+  // ⚠️  crossOrigin DOIT être défini AVANT audio.src — or on change src à chaque
+  //     loadFile(). On le positionne donc ici, juste avant createMediaElementSource,
+  //     puis on recharge l'audio pour que le header CORS soit bien envoyé.
+  //
+  // ✅ iOS + ✅ Android :
+  //   - blob: URL (IndexedDB) → same-origin, crossOrigin ignoré côté CORS
+  //   - Firebase Storage URL → répond Access-Control-Allow-Origin:* pour GET complet
+  //     ⚠️ iOS Safari envoie parfois Origin:null sur les Range requests (streaming)
+  //        → on préfère recharger en blob pour la transposition (voir ci-dessous)
 
   const setupToneChain = useCallback(async () => {
     if (toneReadyRef.current) return
     const audio = getAudio()
+    console.log(`[Pitch] setupToneChain — src: ${audio.src?.slice(0, 80)}... | crossOrigin: "${audio.crossOrigin}"`)
 
-    // Si l'audio est sur une URL Firebase (cross-origin), fetch → blob
-    // MediaElementAudioSourceNode exige same-origin sinon silence total
-    let wasPlaying = false
-    let pos = 0
+    // Si l'audio vient d'une URL Firebase (pas un blob:), on la télécharge en blob
+    // pour éviter les problèmes CORS avec crossOrigin="anonymous" sur iOS Range requests.
+    // ✅ iOS : évite le bug CORS mid-stream sur Safari
+    // ✅ Android : fonctionne aussi, pas de régression
     if (audio.src && !audio.src.startsWith('blob:')) {
-      wasPlaying = !audio.paused
-      pos = audio.currentTime
+      // Fichier Firebase Storage : fetch direct bloqué par CORS dans le navigateur.
+      // Solution : proxy Vercel /api/audio-proxy?url=... qui fetche côté serveur.
+      // Le proxy retourne le fichier avec Access-Control-Allow-Origin:* → pas de blocage.
+      const wasPlaying = !audio.paused
+      const pos = audio.currentTime
+      console.log(`[Pitch] URL Firebase → fetch via proxy Vercel (wasPlaying: ${wasPlaying}, pos: ${pos}s)`)
       audio.pause()
       try {
-        const resp = await fetch(audio.src)
-        if (resp.ok) {
-          const buf  = await resp.arrayBuffer()
-          const mime = resp.headers.get('content-type') || 'audio/mpeg'
-          const blob = new Blob([buf], { type: mime })
-          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-          blobUrlRef.current = URL.createObjectURL(blob)
-          audio.src = blobUrlRef.current
-          audio.load()
-          await new Promise((resolve) => {
-            audio.onloadedmetadata = resolve
-            audio.onerror = resolve
-            setTimeout(resolve, 3000)
-          })
-          audio.currentTime = pos
-        }
+        const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(audio.src)}`
+        console.log(`[Pitch] proxy URL: ${proxyUrl}`)
+        const resp = await fetch(proxyUrl)
+        console.log(`[Pitch] proxy réponse — status: ${resp.status}, CORS: ${resp.headers.get('access-control-allow-origin')}`)
+        if (!resp.ok) throw new Error(`Proxy HTTP ${resp.status}`)
+        const buf  = await resp.arrayBuffer()
+        const mime = resp.headers.get('content-type') || 'audio/mpeg'
+        const blob = new Blob([buf], { type: mime })
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = URL.createObjectURL(blob)
+        console.log(`[Pitch] Blob créé via proxy — type: ${blob.type}, taille: ${blob.size} bytes`)
+        audio.crossOrigin = 'anonymous'
+        audio.src = blobUrlRef.current
+        audio.load()
+        await new Promise((resolve) => {
+          audio.addEventListener('loadedmetadata', resolve, { once: true })
+          audio.addEventListener('canplay',        resolve, { once: true })
+          audio.addEventListener('error',          resolve, { once: true })
+          setTimeout(resolve, 3000)
+        })
+        audio.currentTime = pos
+        if (wasPlaying) audio.play().catch(() => {})
       } catch (e) {
-        console.warn('[AudioPlayer] fetch blob pour Tone:', e)
+        console.warn('[Pitch] fetch via proxy ÉCHEC:', e.message)
+        if (wasPlaying) audio.play().catch(() => {})
+        return  // sortie anticipée : pas de createMediaElementSource sans blob valide
       }
+    } else {
+      console.log('[Pitch] Src déjà en blob: — crossOrigin=anonymous appliqué directement')
+      audio.crossOrigin = 'anonymous'
     }
 
     // Créer la chaîne Tone (PitchShift → destination)
+    // ✅ iOS + ✅ Android : Tone.PitchShift utilise Web Audio API standard
     if (!pitchShiftRef.current) {
       pitchShiftRef.current = new Tone.PitchShift({
         pitch: transposeRef.current,
@@ -143,19 +170,15 @@ export default function useAudioPlayer() {
       pitchShiftRef.current.toDestination()
     }
 
-    // Capturer l'HTMLAudio dans Web Audio (1 seule fois par élément)
+    // createMediaElementSource capture l'élément audio exclusivement dans le graphe Web Audio.
+    // Après cet appel, le son ne sort PLUS par le chemin par défaut — uniquement via Tone.
+    // ✅ iOS + ✅ Android : supporté, mais crossOrigin="anonymous" est requis (défini ci-dessus)
     if (!mediaSourceRef.current) {
       const rawCtx = Tone.getContext().rawContext
       mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
     }
     mediaSourceRef.current.connect(pitchShiftRef.current.input)
     toneReadyRef.current = true
-
-    // Reprendre la lecture APRÈS que la chaîne est branchée
-    if (wasPlaying) {
-      await Tone.start()
-      audio.play().catch(() => {})
-    }
   }, [getAudio])
 
   // ── Chargement fichier ────────────────────────────────────────────────────
@@ -172,52 +195,73 @@ export default function useAudioPlayer() {
     isPlayingRef.current = false
     setLoadError(false)
     loadErrorRef.current = false
+
+    // Réinitialiser la chaîne Tone si on change de fichier
+    // (mediaSourceRef reste valide — il est lié à l'élément audio, pas au src)
+    toneReadyRef.current = false
+
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
 
+    // Réinitialiser crossOrigin : par défaut pas de CORS (sera ajouté si transposition activée)
+    audio.crossOrigin = ''
+
     const record = await getAudioFile(fileId)
+    console.log(`[Audio] loadFile(${fileId}) — IndexedDB:`, record ? `trouvé (${record.type}, ${record.data?.byteLength ?? '?'} bytes)` : 'non trouvé', '| storageUrl:', storageUrl ?? 'aucune')
 
     if (record) {
+      // ── Fichier local (IndexedDB) ──────────────────────────────────────────
       const data = record.data instanceof ArrayBuffer
         ? record.data
         : await record.data.arrayBuffer?.()
       const blob = new Blob([data], { type: record.type || 'audio/mpeg' })
       blobUrlRef.current = URL.createObjectURL(blob)
+      console.log(`[Audio] Blob créé depuis IndexedDB — type: ${blob.type}, taille: ${blob.size} bytes, url: ${blobUrlRef.current}`)
       audio.src = blobUrlRef.current
       audio.load()
       await new Promise((resolve) => {
-        audio.onloadedmetadata = () => {
+        audio.addEventListener('loadedmetadata', () => {
           const dur = audio.duration
+          console.log(`[Audio] loadedmetadata — durée: ${dur}s`)
           setDuration(dur)
           setSegmentEnd(dur);  segEndRef.current = dur
           setSegmentStart(0);  segStartRef.current = 0
           setCurrentTime(0)
           resolve()
-        }
-        audio.onerror = resolve
+        }, { once: true })
+        audio.addEventListener('error', (e) => {
+          console.error('[Audio] Erreur chargement blob:', audio.error)
+          resolve()
+        }, { once: true })
       })
+
     } else if (storageUrl) {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
 
       if (isIOS) {
-        // iOS Safari : URL directe (fetch bloqué par CORS/restrictions PWA)
+        // ── iOS Safari : URL directe ─────────────────────────────────────────
+        console.log('[Audio] iOS détecté — chargement URL directe:', storageUrl)
         audio.preload = 'metadata'
         audio.src = storageUrl
         setSegmentStart(0);  segStartRef.current = 0
         setCurrentTime(0)
         const onMeta = () => {
           const dur = audio.duration
+          console.log(`[Audio] iOS metadata/durationchange — durée: ${dur}s`)
           if (dur && isFinite(dur)) {
             setDuration(dur)
             setSegmentEnd(dur);  segEndRef.current = dur
           }
         }
         audio.addEventListener('loadedmetadata', onMeta, { once: true })
-        audio.addEventListener('durationchange', onMeta, { once: true })
+        audio.addEventListener('durationchange',  onMeta, { once: true })
         audio.addEventListener('error', () => {
+          console.error('[Audio] iOS erreur chargement URL:', audio.error?.code, audio.error?.message)
           setLoadError(true); loadErrorRef.current = true
         }, { once: true })
+
       } else {
-        // Android/desktop : URL directe + listeners robustes
+        // ── Android / Desktop : URL directe + listeners robustes ─────────────
+        console.log('[Audio] Android/Desktop — chargement URL directe:', storageUrl)
         audio.preload = 'auto'
         audio.src = storageUrl
         setSegmentStart(0);  segStartRef.current = 0
@@ -226,6 +270,7 @@ export default function useAudioPlayer() {
         await new Promise((resolve) => {
           const onDur = () => {
             const dur = audio.duration
+            console.log(`[Audio] Android metadata/canplay — durée: ${dur}s`)
             if (dur && isFinite(dur)) {
               setDuration(dur)
               setSegmentEnd(dur);  segEndRef.current = dur
@@ -233,22 +278,22 @@ export default function useAudioPlayer() {
             resolve()
           }
           audio.addEventListener('loadedmetadata', onDur, { once: true })
-          audio.addEventListener('canplay', onDur, { once: true })
+          audio.addEventListener('canplay',        onDur, { once: true })
           audio.addEventListener('durationchange', () => {
             const dur = audio.duration
+            console.log(`[Audio] Android durationchange — durée: ${dur}s`)
             if (dur && isFinite(dur)) {
               setDuration(dur)
               setSegmentEnd(dur);  segEndRef.current = dur
             }
           }, { once: true })
           audio.addEventListener('error', () => {
-            console.warn('[AudioPlayer] audio error:', audio.error)
+            console.error('[Audio] Android erreur chargement URL:', audio.error?.code, audio.error?.message)
             setLoadError(true)
             loadErrorRef.current = true
             resolve()
           }, { once: true })
-          // Timeout : on laisse play() tenter sa chance même sans métadonnées
-          setTimeout(resolve, 3000)
+          setTimeout(() => { console.log('[Audio] Android timeout 3s — on tente play() quand même'); resolve() }, 3000)
         })
       }
     } else {
@@ -285,11 +330,20 @@ export default function useAudioPlayer() {
 
     if (startPos > 0 && dur && isFinite(dur)) audio.currentTime = startPos
 
+    console.log(`[Audio] play() — startPos: ${startPos}s, speed: ${speedRef.current}, toneReady: ${toneReadyRef.current}, src: ${audio.src?.slice(0, 60)}...`)
+
+    if (toneReadyRef.current) {
+      const ctxState = Tone.getContext().rawContext.state
+      console.log(`[Audio] Tone actif — contexte Web Audio: ${ctxState} → appel Tone.start() sans await`)
+      Tone.start() // sans await — voir commentaire compatibilité
+    }
+
     try {
       await audio.play()
       setIsPlaying(true)
+      console.log('[Audio] play() réussi ✓')
       isPlayingRef.current = true
-      // iOS : durée disponible seulement après play()
+      // ✅ iOS : la durée peut n'être disponible qu'après play()
       if (!segEndRef.current && audio.duration && isFinite(audio.duration)) {
         const d = audio.duration
         setDuration(d)
@@ -303,13 +357,14 @@ export default function useAudioPlayer() {
       }
       startRaf()
     } catch (e) {
-      console.warn('[AudioPlayer] play() failed:', e)
+      console.error('[Audio] play() ÉCHEC:', e.name, e.message)
     }
   }, [getAudio, startRaf])
 
   // ── Pause ─────────────────────────────────────────────────────────────────
 
   const pause = useCallback(() => {
+    console.log('[Audio] pause()')
     audioRef.current?.pause()
     setIsPlaying(false)
     isPlayingRef.current = false
@@ -336,18 +391,30 @@ export default function useAudioPlayer() {
   }, [])
 
   // ── Transposition — Tone.PitchShift (tempo inchangé) ─────────────────────
+  //
+  // ✅ iOS + ✅ Android :
+  //   - await Tone.start() ICI est safe car on ne suit pas d'audio.play()
+  //   - Le contexte Web Audio est démarré dans ce geste utilisateur
+  //   - Les appels audio.play() suivants (dans play()) n'ont pas besoin d'await Tone.start()
+  //     car le contexte est déjà running (ou en cours de reprise)
 
   const changeTranspose = useCallback(async (semitones) => {
+    console.log(`[Pitch] changeTranspose(${semitones}) — toneReady avant: ${toneReadyRef.current}`)
     setTranspose(semitones)
     transposeRef.current = semitones
 
-    // Tone.start() SYNCHRONE dès le geste — iOS exige que le resume soit dans le handler direct
-    Tone.start()
+    const ctxBefore = Tone.getContext().rawContext.state
+    console.log(`[Pitch] Contexte Web Audio avant Tone.start(): ${ctxBefore}`)
+    await Tone.start()
+    const ctxAfter = Tone.getContext().rawContext.state
+    console.log(`[Pitch] Contexte Web Audio après Tone.start(): ${ctxAfter}`)
 
     await setupToneChain()
+    console.log(`[Pitch] setupToneChain terminé — toneReady: ${toneReadyRef.current}, pitchShift: ${pitchShiftRef.current ? 'OK' : 'NULL'}, mediaSource: ${mediaSourceRef.current ? 'OK' : 'NULL'}`)
 
     if (pitchShiftRef.current) {
       pitchShiftRef.current.pitch = semitones
+      console.log(`[Pitch] pitch défini à ${semitones} demi-tons ✓`)
     }
   }, [setupToneChain])
 

@@ -38,10 +38,15 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   const [showMetronome, setShowMetronome] = useState(false)
   const [markerMenu, setMarkerMenu] = useState(null)
 
-  // Ref de la barre de progression pour les interactions
-  const progressBarRef = useRef(null)
-  const canvasRef = useRef(null)
-  const isDraggingRef = useRef(null) // null | 'seek' | 'segStart' | 'segEnd'
+  // Refs DOM
+  const progressBarRef  = useRef(null)
+  const handleStartRef  = useRef(null)
+  const handleEndRef    = useRef(null)
+  const canvasRef       = useRef(null)
+  const isDraggingRef   = useRef(null) // null | 'seek' | 'segStart' | 'segEnd'
+
+  // Ref stable vers startDrag (évite de ré-attacher les listeners DOM à chaque render)
+  const startDragRef = useRef(null)
 
   // Dessiner la waveform
   useEffect(() => {
@@ -101,25 +106,87 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
     return pct * player.duration
   }, [player.duration])
 
-  const handleProgressPointerDown = useCallback((e) => {
-    e.preventDefault()
-    progressBarRef.current?.setPointerCapture?.(e.pointerId)
-    isDraggingRef.current = 'seek'
-    const t = xToTime(e.clientX)
-    player.seek(t)
+  // ── Drag des curseurs ────────────────────────────────────────────────────────
+  //
+  // Problème iOS Safari : React 17+ attache les synthetic events en mode passif
+  // au niveau du root. Dans un conteneur overflow-y-auto, iOS intercepte les touches
+  // pour le scroll avant que React ne les reçoive → onTouchStart React ne se déclenche pas.
+  //
+  // Solution : listeners attachés directement sur le DOM via useEffect, avec passive:false.
+  // Cela bypass complètement React pour les handles.
+  // Pour la barre de seek, onPointerDown React suffit (pas dans overflow:auto problématique).
+
+  const startDrag = useCallback((type, e) => {
+    const isTouchEvent = !!(e.touches)
+    const startX = isTouchEvent ? e.touches[0].clientX : e.clientX
+
+    e.preventDefault()   // bloque le scroll (passive:false garanti par useEffect)
+    e.stopPropagation()
+    isDraggingRef.current = type
+    console.log(`[Curseur] drag START — type: ${type}, event: ${e.type}, clientX: ${startX}`)
+
+    const moveAt = (x) => {
+      const t = xToTime(x)
+      if (isDraggingRef.current === 'seek') {
+        player.seek(t)
+      } else if (isDraggingRef.current === 'segStart') {
+        const newStart = Math.min(t, (player.segmentEnd ?? player.duration) - 0.5)
+        console.log(`[Curseur] segStart → ${newStart.toFixed(2)}s`)
+        player.setSegment(newStart, player.segmentEnd)
+      } else if (isDraggingRef.current === 'segEnd') {
+        const newEnd = Math.max(t, player.segmentStart + 0.5)
+        console.log(`[Curseur] segEnd → ${newEnd.toFixed(2)}s`)
+        player.setSegment(player.segmentStart, newEnd)
+      }
+    }
+
+    // ✅ Android : pointermove uniquement pour souris/stylet (pointerType!=='touch')
+    // ✅ iOS     : touchmove sur window, passive:false pour permettre preventDefault
+    const onPointerMove = (ev) => { if (ev.pointerType === 'touch') return; moveAt(ev.clientX) }
+    const onPointerUp   = (ev) => { if (ev.pointerType === 'touch') return; end() }
+    const onTouchMove   = (ev) => { ev.preventDefault(); moveAt(ev.touches[0].clientX) }
+    const onTouchEnd    = () => end()
+
+    const end = () => {
+      console.log(`[Curseur] drag END`)
+      isDraggingRef.current = null
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup',   onPointerUp)
+      window.removeEventListener('touchmove',   onTouchMove)
+      window.removeEventListener('touchend',    onTouchEnd)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup',   onPointerUp)
+    window.addEventListener('touchmove',   onTouchMove, { passive: false })
+    window.addEventListener('touchend',    onTouchEnd)
+
+    if (type === 'seek') moveAt(startX)
   }, [xToTime, player])
 
-  const handleProgressPointerMove = useCallback((e) => {
-    if (!isDraggingRef.current) return
-    const t = xToTime(e.clientX)
-    if (isDraggingRef.current === 'seek') player.seek(t)
-    else if (isDraggingRef.current === 'segStart') player.setSegment(Math.min(t, (player.segmentEnd ?? player.duration) - 0.5), player.segmentEnd)
-    else if (isDraggingRef.current === 'segEnd') player.setSegment(player.segmentStart, Math.max(t, player.segmentStart + 0.5))
-  }, [xToTime, player])
+  // Mettre à jour la ref stable à chaque render
+  startDragRef.current = startDrag
 
-  const handleProgressPointerUp = useCallback(() => {
-    isDraggingRef.current = null
-  }, [])
+  // Attacher les listeners touchstart directement sur les handles via le DOM
+  // passive:false obligatoire pour que preventDefault() bloque le scroll iOS
+  useEffect(() => {
+    const startEl = handleStartRef.current
+    const endEl   = handleEndRef.current
+    if (!startEl || !endEl) return
+
+    const onStartTouch = (e) => startDragRef.current('segStart', e)
+    const onEndTouch   = (e) => startDragRef.current('segEnd',   e)
+
+    startEl.addEventListener('touchstart', onStartTouch, { passive: false })
+    endEl.addEventListener('touchstart',   onEndTouch,   { passive: false })
+
+    console.log('[Curseur] listeners DOM touchstart attachés sur les handles')
+
+    return () => {
+      startEl.removeEventListener('touchstart', onStartTouch)
+      endEl.removeEventListener('touchstart',   onEndTouch)
+    }
+  }, []) // Une seule fois — startDragRef.current est toujours à jour
 
   if (!song || !button) return null
 
@@ -172,22 +239,23 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
         </div>
 
         {/* ── Barre de progression / waveform ── */}
-        <div className="mb-1">
-          {/* Barre interactive */}
-          <div
+        {/* touch-action:none sur le wrapper → iOS ne scroll pas dans cette zone */}
+        <div className="mb-1 relative h-12" style={{ touchAction: 'none' }}>
+          {/* Barre interactive — <button> pour iOS Safari, overflow-hidden pour visuels */}
+          <button
+            type="button"
             ref={progressBarRef}
-            className="relative h-12 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden cursor-pointer select-none"
-            onPointerDown={handleProgressPointerDown}
-            onPointerMove={handleProgressPointerMove}
-            onPointerUp={handleProgressPointerUp}
-            onPointerLeave={handleProgressPointerUp}
+            className="absolute inset-0 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden select-none p-0 border-0"
+            style={{ touchAction: 'none', cursor: 'pointer' }}
+            onTouchStart={(e) => startDrag('seek', e)}
+            onPointerDown={(e) => { if (e.pointerType === 'touch') return; startDrag('seek', e) }}
           >
             {/* Zone segment sélectionné */}
             <div
               className="absolute top-0 bottom-0 bg-blue-100 dark:bg-blue-900/40"
               style={{ left: `${segStartPct}%`, width: `${segEndPct - segStartPct}%` }}
             />
-            {/* Waveform canvas — au-dessus du fond, sous le curseur */}
+            {/* Waveform canvas */}
             <canvas
               ref={canvasRef}
               width={800}
@@ -204,34 +272,6 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
               className="absolute top-0 bottom-0 w-0.5 bg-orange-500 z-10"
               style={{ left: `${curPct}%` }}
             />
-            {/* Handle début de segment */}
-            <div
-              className="absolute top-0 bottom-0 w-12 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center touch-none"
-              style={{ left: `${segStartPct}%` }}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                progressBarRef.current?.setPointerCapture(e.pointerId)
-                isDraggingRef.current = 'segStart'
-              }}
-            >
-              <div className="w-0.5 h-full bg-green-500 shadow" />
-              <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg" />
-            </div>
-            {/* Handle fin de segment */}
-            <div
-              className="absolute top-0 bottom-0 w-12 -translate-x-1/2 cursor-col-resize z-20 flex items-center justify-center touch-none"
-              style={{ left: `${segEndPct}%` }}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                progressBarRef.current?.setPointerCapture(e.pointerId)
-                isDraggingRef.current = 'segEnd'
-              }}
-            >
-              <div className="w-0.5 h-full bg-green-500 shadow" />
-              <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg" />
-            </div>
             {/* Marqueurs */}
             {markers.map((m) => (
               <button
@@ -243,7 +283,31 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
                 <span className="text-green-600 text-xs mt-1">▼</span>
               </button>
             ))}
-          </div>
+          </button>
+
+          {/* Handle début — ref DOM pour listener touchstart direct (iOS Safari) */}
+          <button
+            ref={handleStartRef}
+            type="button"
+            className="absolute top-0 bottom-0 w-12 -translate-x-1/2 z-20 flex items-center justify-center bg-transparent border-0 p-0"
+            style={{ left: `${segStartPct}%`, touchAction: 'none', cursor: 'col-resize' }}
+            onPointerDown={(e) => { if (e.pointerType === 'touch') return; startDrag('segStart', e) }}
+          >
+            <div className="w-0.5 h-full bg-green-500 shadow pointer-events-none" />
+            <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg pointer-events-none" />
+          </button>
+
+          {/* Handle fin — ref DOM pour listener touchstart direct (iOS Safari) */}
+          <button
+            ref={handleEndRef}
+            type="button"
+            className="absolute top-0 bottom-0 w-12 -translate-x-1/2 z-20 flex items-center justify-center bg-transparent border-0 p-0"
+            style={{ left: `${segEndPct}%`, touchAction: 'none', cursor: 'col-resize' }}
+            onPointerDown={(e) => { if (e.pointerType === 'touch') return; startDrag('segEnd', e) }}
+          >
+            <div className="w-0.5 h-full bg-green-500 shadow pointer-events-none" />
+            <div className="absolute bottom-1 w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow-lg pointer-events-none" />
+          </button>
         </div>
 
         {/* Temps */}

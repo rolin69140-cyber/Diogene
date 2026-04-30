@@ -48,13 +48,23 @@ export async function saveAudioFile(id, arrayBuffer, name, type) {
 }
 
 export async function getAudioFile(id) {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('audioFiles', 'readonly')
-    const req = tx.objectStore('audioFiles').get(id)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = (e) => reject(e.target.error)
-  })
+  // ✅ iOS Safari : .get() peut rejeter avec "key not found" au lieu de retourner undefined.
+  // On catch et on retourne null → le player retombe sur la Firebase Storage URL.
+  try {
+    const db = await openDB()
+    return await new Promise((resolve) => {
+      const tx = db.transaction('audioFiles', 'readonly')
+      const req = tx.objectStore('audioFiles').get(id)
+      req.onsuccess = () => resolve(req.result ?? null)
+      req.onerror = (e) => {
+        console.warn('[IndexedDB] getAudioFile error (iOS?):', e.target.error)
+        resolve(null)
+      }
+    })
+  } catch (e) {
+    console.warn('[IndexedDB] getAudioFile catch:', e)
+    return null
+  }
 }
 
 export async function deleteAudioFile(id) {
@@ -78,13 +88,19 @@ export async function savePdfFile(id, arrayBuffer, name) {
 }
 
 export async function getPdfFile(id) {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('pdfFiles', 'readonly')
-    const req = tx.objectStore('pdfFiles').get(id)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = (e) => reject(e.target.error)
-  })
+  // Même protection que getAudioFile : iOS Safari peut rejeter au lieu de retourner undefined
+  try {
+    const db = await openDB()
+    return await new Promise((resolve) => {
+      const tx = db.transaction('pdfFiles', 'readonly')
+      const req = tx.objectStore('pdfFiles').get(id)
+      req.onsuccess = () => resolve(req.result ?? null)
+      req.onerror = (e) => { console.warn('[IndexedDB] getPdfFile error:', e.target.error); resolve(null) }
+    })
+  } catch (e) {
+    console.warn('[IndexedDB] getPdfFile catch:', e)
+    return null
+  }
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
