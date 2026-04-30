@@ -61,9 +61,11 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
       }
       // Si pas de données locales (ex: iPhone, fichier en cloud uniquement) → pas de waveform, pas grave
       if (!arrayBuf || cancelled) return
-      const audioCtx = new AudioContext()
+      // ✅ iOS + ✅ Android : OfflineAudioContext ne nécessite pas de geste utilisateur
+      // et n'émet pas de warning "AudioContext not allowed" sur Android Chrome
+      const audioCtx = new OfflineAudioContext(1, 44100, 44100)
       let decoded
-      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { audioCtx.close(); return }
+      try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { return }
       audioCtx.close()
       if (cancelled) return
       const canvas = canvasRef.current
@@ -167,26 +169,34 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   // Mettre à jour la ref stable à chaque render
   startDragRef.current = startDrag
 
-  // Attacher les listeners touchstart directement sur les handles via le DOM
-  // passive:false obligatoire pour que preventDefault() bloque le scroll iOS
+  // Attacher les listeners touchstart directement sur le DOM (passive:false).
+  // Nécessaire sur iOS Safari ET Android Chrome : React 17+ attache tous les
+  // synthetic events en mode passif au root → preventDefault() ignoré → scroll
+  // se déclenche pendant le drag au lieu d'être bloqué.
+  // On attache sur la barre, les deux handles. Dépendance sur [song, button]
+  // car le composant rend null tant qu'ils ne sont pas chargés → refs null.
   useEffect(() => {
+    const barEl   = progressBarRef.current
     const startEl = handleStartRef.current
     const endEl   = handleEndRef.current
-    if (!startEl || !endEl) return
+    if (!barEl || !startEl || !endEl) return
 
+    const onBarTouch   = (e) => startDragRef.current('seek',     e)
     const onStartTouch = (e) => startDragRef.current('segStart', e)
     const onEndTouch   = (e) => startDragRef.current('segEnd',   e)
 
+    barEl.addEventListener('touchstart',   onBarTouch,   { passive: false })
     startEl.addEventListener('touchstart', onStartTouch, { passive: false })
     endEl.addEventListener('touchstart',   onEndTouch,   { passive: false })
 
-    console.log('[Curseur] listeners DOM touchstart attachés sur les handles')
+    console.log('[Curseur] listeners DOM touchstart attachés (barre + handles)')
 
     return () => {
+      barEl.removeEventListener('touchstart',   onBarTouch)
       startEl.removeEventListener('touchstart', onStartTouch)
       endEl.removeEventListener('touchstart',   onEndTouch)
     }
-  }, []) // Une seule fois — startDragRef.current est toujours à jour
+  }, [song?.id, button?.id]) // Re-attache si on change de morceau
 
   if (!song || !button) return null
 
@@ -247,7 +257,6 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             ref={progressBarRef}
             className="absolute inset-0 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden select-none p-0 border-0"
             style={{ touchAction: 'none', cursor: 'pointer' }}
-            onTouchStart={(e) => startDrag('seek', e)}
             onPointerDown={(e) => { if (e.pointerType === 'touch') return; startDrag('seek', e) }}
           >
             {/* Zone segment sélectionné */}

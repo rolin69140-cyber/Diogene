@@ -1,9 +1,13 @@
 import { useRef, useState, useCallback } from 'react'
 
+// ✅ iOS + ✅ Android : webkitAudioContext pour compatibilité anciens WebKit
+const AC = window.AudioContext || window.webkitAudioContext
+
 let sharedCtx = null
 function getCtx() {
+  // Créé uniquement ici, appelé depuis un geste utilisateur (bouton start métronome)
   if (!sharedCtx || sharedCtx.state === 'closed') {
-    sharedCtx = new AudioContext()
+    sharedCtx = new AC()
   }
   if (sharedCtx.state === 'suspended') sharedCtx.resume()
   return sharedCtx

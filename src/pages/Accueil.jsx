@@ -1,47 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
-const MENU = [
-  {
-    to: '/repetition',
-    icon: '🎵',
-    label: 'Répétition',
-    desc: 'Notes d\'attaque & fichiers audio',
-    color: 'from-blue-500 to-blue-700',
-    shadow: 'shadow-blue-200 dark:shadow-blue-900',
-  },
-  {
-    to: '/concert',
-    icon: '🎤',
-    label: 'Concert',
-    desc: 'Mode scène, marqueurs & setlist',
-    color: 'from-indigo-500 to-indigo-700',
-    shadow: 'shadow-indigo-200 dark:shadow-indigo-900',
-  },
-  {
-    to: '/librairie',
-    icon: '📚',
-    label: 'Librairie',
-    desc: 'Gérer chants, sets & imports',
-    color: 'from-emerald-500 to-emerald-700',
-    shadow: 'shadow-emerald-200 dark:shadow-emerald-900',
-  },
-  {
-    to: '/clavier',
-    icon: '🎹',
-    label: 'Clavier',
-    desc: 'Piano & solfège interactif',
-    color: 'from-amber-500 to-orange-600',
-    shadow: 'shadow-amber-200 dark:shadow-amber-900',
-  },
-  {
-    to: '/parametres',
-    icon: '⚙️',
-    label: 'Réglages',
-    desc: 'Pupitre, thème & préférences',
-    color: 'from-gray-500 to-gray-700',
-    shadow: 'shadow-gray-200 dark:shadow-gray-800',
-  },
-]
+// Classes Tailwind en dur dans le JSX — Tailwind purge ne détecte pas les classes
+// stockées dans des variables JS et interpolées dynamiquement en production.
 
 export default function Accueil() {
   const navigate = useNavigate()
@@ -64,23 +24,52 @@ export default function Accueil() {
 
       {/* ── Menu ────────────────────────────────────────────────── */}
       <div className="w-full max-w-sm grid grid-cols-2 gap-3">
-        {MENU.map((item) => (
-          <button
-            key={item.to}
-            onClick={() => navigate(item.to)}
-            className={`
-              relative flex flex-col items-start gap-1 p-4 rounded-2xl
-              bg-gradient-to-br ${item.color}
-              text-white shadow-lg ${item.shadow}
-              active:scale-95 transition-transform
-              ${item.to === '/parametres' ? 'col-span-2' : ''}
-            `}
-          >
-            <span className="text-3xl leading-none">{item.icon}</span>
-            <span className="font-bold text-base leading-tight mt-1">{item.label}</span>
-            <span className="text-xs opacity-75 leading-tight">{item.desc}</span>
-          </button>
-        ))}
+
+        <button
+          onClick={() => navigate('/repetition')}
+          className="relative flex flex-col items-start gap-1 p-4 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-200 dark:shadow-blue-900 active:scale-95 transition-transform"
+        >
+          <span className="text-3xl leading-none">🎵</span>
+          <span className="font-bold text-base leading-tight mt-1">Répétition</span>
+          <span className="text-xs opacity-75 leading-tight">Notes d'attaque &amp; fichiers audio</span>
+        </button>
+
+        <button
+          onClick={() => navigate('/concert')}
+          className="relative flex flex-col items-start gap-1 p-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900 active:scale-95 transition-transform"
+        >
+          <span className="text-3xl leading-none">🎤</span>
+          <span className="font-bold text-base leading-tight mt-1">Concert</span>
+          <span className="text-xs opacity-75 leading-tight">Mode scène, marqueurs &amp; setlist</span>
+        </button>
+
+        <button
+          onClick={() => navigate('/librairie')}
+          className="relative flex flex-col items-start gap-1 p-4 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900 active:scale-95 transition-transform"
+        >
+          <span className="text-3xl leading-none">📚</span>
+          <span className="font-bold text-base leading-tight mt-1">Librairie</span>
+          <span className="text-xs opacity-75 leading-tight">Gérer chants, sets &amp; imports</span>
+        </button>
+
+        <button
+          onClick={() => navigate('/clavier')}
+          className="relative flex flex-col items-start gap-1 p-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-200 dark:shadow-amber-900 active:scale-95 transition-transform"
+        >
+          <span className="text-3xl leading-none">🎹</span>
+          <span className="font-bold text-base leading-tight mt-1">Clavier</span>
+          <span className="text-xs opacity-75 leading-tight">Piano &amp; solfège interactif</span>
+        </button>
+
+        <button
+          onClick={() => navigate('/parametres')}
+          className="col-span-2 relative flex flex-col items-start gap-1 p-4 rounded-2xl bg-gradient-to-br from-gray-500 to-gray-700 text-white shadow-lg shadow-gray-200 dark:shadow-gray-800 active:scale-95 transition-transform"
+        >
+          <span className="text-3xl leading-none">⚙️</span>
+          <span className="font-bold text-base leading-tight mt-1">Réglages</span>
+          <span className="text-xs opacity-75 leading-tight">Pupitre, thème &amp; préférences</span>
+        </button>
+
       </div>
 
       {/* ── Version ─────────────────────────────────────────────── */}
