@@ -203,8 +203,16 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   // Fichier non disponible sur cet appareil (pas dans IndexedDB ni Firebase)
   if (player.loadError) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center" onClick={onClose}>
-        <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-2xl md:rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+        onClick={onClose}
+      >
+        <div
+          className="w-full max-w-lg rounded-t-2xl md:rounded-2xl p-6"
+          style={{ backgroundColor: 'white' }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-start justify-between mb-3">
             <h2 className="font-bold text-lg">{song.name}</h2>
             <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4">×</button>
@@ -234,9 +242,14 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   const segEndPct = (((player.segmentEnd ?? dur)) / dur) * 100
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
       <div
-        className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-2xl md:rounded-2xl p-4 max-h-[90dvh] overflow-y-auto"
+        className="w-full max-w-lg rounded-t-2xl md:rounded-2xl p-4 max-h-[90dvh] overflow-y-auto"
+        style={{ backgroundColor: 'white' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

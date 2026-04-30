@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Force Tailwind v4 à scanner tous les fichiers source — nécessaire car
+   le plugin Vite peut manquer certains fichiers avec des classes dynamiques */
+@source "../src/**/*.{jsx,js,ts,tsx,html}";
+
 @theme {
   --color-basse: #185FA5;
   --color-alti: #534AB7;
