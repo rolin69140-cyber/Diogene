@@ -88,8 +88,19 @@ export default function useAudioPlayer() {
       const pos    = audio.currentTime
       const endPos = segEndRef.current ?? audio.duration ?? Infinity
       setCurrentTime(pos)
-      if (isFinite(endPos) && pos >= endPos - 0.05 && loopRef.current) {
-        audio.currentTime = segStartRef.current
+      if (isFinite(endPos) && pos >= endPos - 0.05) {
+        if (loopRef.current) {
+          // Mode boucle : revenir au début du segment
+          audio.currentTime = segStartRef.current
+        } else {
+          // Mode normal : arrêter la lecture au curseur droit
+          audio.pause()
+          audio.currentTime = segStartRef.current
+          setIsPlaying(false)
+          isPlayingRef.current = false
+          setCurrentTime(segStartRef.current)
+          return // arrête le RAF
+        }
       }
       rafRef.current = requestAnimationFrame(tick)
     }
