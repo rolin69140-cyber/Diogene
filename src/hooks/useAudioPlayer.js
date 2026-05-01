@@ -137,6 +137,18 @@ export default function useAudioPlayer() {
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
         blobUrlRef.current = URL.createObjectURL(blob)
         console.log(`[Pitch] Blob créé via proxy — type: ${blob.type}, taille: ${blob.size} bytes`)
+
+        // ── Reset complet de l'élément audio avant de changer le mode CORS ──────
+        // iOS Safari "verrouille" le mode CORS interne à la première assignation de src.
+        // Si audio.src a été défini sans crossOrigin (cas iOS Firebase dans loadFile),
+        // iOS refuse createMediaElementSource même après avoir changé crossOrigin.
+        // removeAttribute('src') + load() efface cet état interne → iOS accepte ensuite
+        // le nouveau mode CORS défini avant la nouvelle src.
+        // ✅ iOS Safari : efface le verrou CORS interne
+        // ✅ Android  : removeAttribute + load() est un no-op sans effet de bord
+        audio.removeAttribute('src')
+        audio.load()
+        // crossOrigin DOIT être défini APRÈS le reset et AVANT la nouvelle src
         audio.crossOrigin = 'anonymous'
         audio.src = blobUrlRef.current
         audio.load()
@@ -146,7 +158,7 @@ export default function useAudioPlayer() {
           audio.addEventListener('error',          resolve, { once: true })
           setTimeout(resolve, 3000)
         })
-        audio.currentTime = pos
+        try { audio.currentTime = pos } catch {}
         if (wasPlaying) audio.play().catch(() => {})
       } catch (e) {
         console.warn('[Pitch] fetch via proxy ÉCHEC:', e.message)
@@ -156,7 +168,7 @@ export default function useAudioPlayer() {
     } else {
       // blob: URL — crossOrigin='anonymous' déjà positionné dans loadFile()
       // avant audio.src (requis iOS Safari pour createMediaElementSource sans SecurityError)
-      console.log(`[Pitch] Src déjà en blob: — crossOrigin déjà: "${audio.crossOrigin}" (posé dans loadFile)`)
+      console.log(`[Pitch] Src déjà en blob: — crossOrigin: "${audio.crossOrigin}" (posé dans loadFile)`)
     }
 
     // Créer la chaîne Tone (PitchShift → destination)
@@ -171,12 +183,19 @@ export default function useAudioPlayer() {
       pitchShiftRef.current.toDestination()
     }
 
-    // createMediaElementSource capture l'élément audio exclusivement dans le graphe Web Audio.
-    // Après cet appel, le son ne sort PLUS par le chemin par défaut — uniquement via Tone.
-    // ✅ iOS + ✅ Android : supporté, mais crossOrigin="anonymous" est requis (défini ci-dessus)
+    // createMediaElementSource capture l'élément audio dans le graphe Web Audio.
+    // ⚠️ iOS Safari peut lancer "A value with the given key could not be found" si
+    //    l'élément n'a pas été correctement réinitialisé ci-dessus. On catch pour
+    //    éviter l'Unhandled Promise Rejection et logguer l'erreur précise.
     if (!mediaSourceRef.current) {
-      const rawCtx = Tone.getContext().rawContext
-      mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
+      try {
+        const rawCtx = Tone.getContext().rawContext
+        mediaSourceRef.current = rawCtx.createMediaElementSource(audio)
+        console.log('[Pitch] createMediaElementSource ✓')
+      } catch (e) {
+        console.warn('[Pitch] createMediaElementSource ÉCHEC (iOS CORS?):', e.message)
+        return  // sortie — toneReady reste false
+      }
     }
     mediaSourceRef.current.connect(pitchShiftRef.current.input)
     toneReadyRef.current = true
