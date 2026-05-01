@@ -204,7 +204,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   if (player.loadError) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+        className="fixed inset-0 z-[100] flex items-end md:items-center justify-center"
         style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
         onClick={onClose}
       >
@@ -248,7 +248,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+      className="fixed inset-0 z-[100] flex items-end md:items-center justify-center"
       style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
       onClick={onClose}
     >

@@ -154,8 +154,9 @@ export default function useAudioPlayer() {
         return  // sortie anticipée : pas de createMediaElementSource sans blob valide
       }
     } else {
-      console.log('[Pitch] Src déjà en blob: — crossOrigin=anonymous appliqué directement')
-      audio.crossOrigin = 'anonymous'
+      // blob: URL — crossOrigin='anonymous' déjà positionné dans loadFile()
+      // avant audio.src (requis iOS Safari pour createMediaElementSource sans SecurityError)
+      console.log(`[Pitch] Src déjà en blob: — crossOrigin déjà: "${audio.crossOrigin}" (posé dans loadFile)`)
     }
 
     // Créer la chaîne Tone (PitchShift → destination)
@@ -219,6 +220,11 @@ export default function useAudioPlayer() {
       const blob = new Blob([data], { type: record.type || 'audio/mpeg' })
       blobUrlRef.current = URL.createObjectURL(blob)
       console.log(`[Audio] Blob créé depuis IndexedDB — type: ${blob.type}, taille: ${blob.size} bytes, url: ${blobUrlRef.current}`)
+      // ✅ iOS Safari : crossOrigin DOIT être défini AVANT audio.src pour que
+      // createMediaElementSource() (Web Audio API) fonctionne sans SecurityError.
+      // Pour les blob: same-origin, aucun header CORS n'est envoyé — c'est juste
+      // le mode qui permet à iOS d'autoriser la capture par Web Audio.
+      audio.crossOrigin = 'anonymous'
       audio.src = blobUrlRef.current
       audio.load()
       await new Promise((resolve) => {

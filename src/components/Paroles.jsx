@@ -180,7 +180,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
   if (fullscreen) {
     return (
       <div
-        className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col"
+        className="fixed inset-0 z-[100] bg-white dark:bg-gray-900 flex flex-col"
         onClick={showBar}
       >
         {/* Bouton exit coin haut-droit */}
@@ -247,7 +247,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
 
   // ── Modale normale ─────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center"
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-end md:items-center justify-center"
       onClick={() => { exitFullscreen(); onClose() }}>
       <div
         className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-2xl md:rounded-2xl flex flex-col"
