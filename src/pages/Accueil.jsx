@@ -7,17 +7,17 @@ export default function Accueil() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex-1 overflow-y-auto flex flex-col items-center px-4 pt-10 pb-6 bg-white dark:bg-gray-950">
+    <div className="flex-1 overflow-y-auto flex flex-col items-center px-4 pt-8 pb-6 bg-white dark:bg-gray-950">
 
       {/* ── Logo ────────────────────────────────────────────────── */}
-      <div className="flex flex-col items-center mb-8 select-none">
+      <div className="flex flex-col items-center mb-6 select-none">
         <img
           src="/logo.jpeg"
           alt="Logo Diogène"
-          className="w-52 h-52 object-contain drop-shadow-md"
+          className="w-44 h-44 object-contain drop-shadow-lg rounded-3xl"
           draggable={false}
         />
-        <p className="mt-2 text-sm text-gray-400 dark:text-gray-500 tracking-widest uppercase">
+        <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 tracking-[0.2em] uppercase font-medium">
           Chorale
         </p>
       </div>

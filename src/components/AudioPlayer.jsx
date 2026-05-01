@@ -209,10 +209,14 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
         onClick={onClose}
       >
         <div
-          className="w-full max-w-lg rounded-t-2xl md:rounded-2xl p-6"
+          className="w-full max-w-lg rounded-t-2xl md:rounded-2xl"
           style={{ backgroundColor: 'white' }}
           onClick={(e) => e.stopPropagation()}
         >
+          <div className="flex justify-center pt-3 pb-1 md:hidden">
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
+          <div className="px-6 pb-6 pt-2">
           <div className="flex items-start justify-between mb-3">
             <h2 className="font-bold text-lg">{song.name}</h2>
             <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4">×</button>
@@ -231,6 +235,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
               </a>
             )}
           </div>
+          </div>{/* fin px-6 */}
         </div>
       </div>
     )
@@ -248,22 +253,30 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-t-2xl md:rounded-2xl p-4 max-h-[90dvh] overflow-y-auto"
+        className="w-full max-w-lg rounded-t-2xl md:rounded-2xl max-h-[90dvh] overflow-y-auto"
         style={{ backgroundColor: 'white' }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Drag handle — indique que c'est une bottom sheet glissable */}
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+
+        <div className="px-4 pb-4 pt-2">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="font-bold text-lg">{song.name}</h2>
-            <p className="text-sm text-gray-500">{button.label} — {formatTime(player.duration)}</p>
+            <h2 className="font-bold text-lg leading-tight">{song.name}</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{button.label} — {formatTime(player.duration)}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4">×</button>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4 mt-0.5">×</button>
         </div>
 
         {/* ── Barre de progression / waveform ── */}
-        {/* touch-action:none sur le wrapper → iOS ne scroll pas dans cette zone */}
-        <div className="mb-1 relative h-12" style={{ touchAction: 'none' }}>
+        {/* mx-3 : recule les handles de 12px du bord du modal.
+            Sans ça, le handle fin (left:100%) dépasse du bord écran sur mobile →
+            Android intercepte le geste pour sa navigation par glissement de bord. */}
+        <div className="mb-1 relative h-12 mx-3" style={{ touchAction: 'none' }}>
           {/* Barre interactive — <button> pour iOS Safari, overflow-hidden pour visuels */}
           <button
             type="button"
@@ -412,6 +425,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
           {showMetronome ? '▲ Masquer le métronome' : '▼ Métronome'}
         </button>
         {showMetronome && <Metronome defaultBpm={song?.bpm} />}
+        </div>{/* fin px-4 */}
       </div>
 
       {/* Menu marqueur */}

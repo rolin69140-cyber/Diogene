@@ -150,24 +150,35 @@ export default function Layout({ children }) {
 
   return (
     <div className={`flex flex-col h-dvh bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 ${darkClass} ${modeScene ? 'bg-gray-950 brightness-50' : ''}`}>
-      <main className="flex-1 min-h-0 overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-16">
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col md:pb-0 md:ml-16 pb-nav-safe">
         {children}
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden"
+        style={{
+          backgroundColor: theme === 'sombre' ? 'rgba(17,24,39,0.93)' : 'rgba(255,255,255,0.93)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderTop: theme === 'sombre' ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs transition-colors
-               ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`
+              `relative flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-[10px] transition-colors border-t-2
+               ${isActive
+                 ? 'text-blue-600 dark:text-blue-400 border-blue-500 dark:border-blue-400'
+                 : 'text-gray-400 dark:text-gray-500 border-transparent'}`
             }
           >
-            <span className="text-xl leading-none">{item.icon}</span>
-            <span>{item.label}</span>
+            <span className="text-[20px] leading-none">{item.icon}</span>
+            <span className="font-medium">{item.label}</span>
           </NavLink>
         ))}
       </nav>

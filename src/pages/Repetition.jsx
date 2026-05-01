@@ -296,37 +296,44 @@ export default function Repetition() {
           </div>
         )}
 
-        <input
-          type="search"
-          placeholder="Rechercher un chant…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 mb-3 text-sm"
-        />
+        <div className="relative mb-3">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-sm">🔍</span>
+          <input
+            type="search"
+            placeholder="Rechercher un chant…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm"
+          />
+        </div>
 
         {songs.length === 0 && (
           <p className="text-center text-gray-400 py-8 text-sm">Aucun chant — ajoutez-en depuis la Bibliothèque</p>
         )}
 
-        <div className="space-y-1 pb-4">
+        <div className="space-y-1.5 pb-4">
           {filteredSongs.map((song) => {
             const isActive = song.id === activeSongId
             return (
-              <div key={song.id} className={`flex items-center rounded-xl transition-colors text-sm font-medium ${
-                isActive ? 'bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+              <div key={song.id} className={`flex items-center rounded-2xl transition-all text-sm font-medium overflow-hidden ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-950/60 shadow-sm'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-800/60'
               }`}>
+                {/* Accent bar gauche quand actif */}
+                <div className={`w-1 self-stretch flex-shrink-0 rounded-l-2xl transition-colors ${isActive ? 'bg-blue-500' : 'bg-transparent'}`} />
                 <button
-                  className="flex-1 text-left px-4 py-3"
+                  className="flex-1 text-left px-3 py-3.5"
                   onClick={() => {
                     setActiveSong(isActive ? null : song.id)
                     setVoiceFilter(availablePupitres.length > 0 ? availablePupitres : ['B', 'A', 'S', 'T'])
                   }}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={isActive ? 'text-blue-700 dark:text-blue-300 font-semibold' : ''}>{song.name}</span>
-                    <div className="flex gap-1 items-center">
-                      {song.bpm && <span className="text-xs text-gray-400 mr-1">{song.bpm}♩</span>}
-                      {song.audioButtons?.length > 0 && <span className="text-xs text-gray-400">🔊{song.audioButtons.length}</span>}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`truncate ${isActive ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-gray-800 dark:text-gray-200'}`}>{song.name}</span>
+                    <div className="flex gap-1.5 items-center flex-shrink-0">
+                      {song.bpm && <span className="text-[11px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">{song.bpm}♩</span>}
+                      {song.audioButtons?.length > 0 && <span className="text-[11px] text-gray-400">🔊</span>}
                     </div>
                   </div>
                 </button>
@@ -335,7 +342,7 @@ export default function Repetition() {
                     {/* Bouton chef de chœur 🎼 */}
                     <button
                       onClick={() => setDirectorSongId(song.id)}
-                      className="relative px-2.5 py-3 text-gray-400 hover:text-indigo-500 transition-colors"
+                      className="relative px-2.5 py-3.5 text-gray-400 hover:text-indigo-500 transition-colors"
                       title="Notes du chef de chœur"
                     >
                       🎼
@@ -346,7 +353,7 @@ export default function Repetition() {
                     {/* Bouton notes ✏️ */}
                     <button
                       onClick={() => setNotesSongId(song.id)}
-                      className="relative px-2.5 py-3 text-gray-400 hover:text-amber-500 transition-colors"
+                      className="relative px-2.5 py-3.5 text-gray-400 hover:text-amber-500 transition-colors"
                       title="Notes de répétition"
                     >
                       ✏️
@@ -357,7 +364,7 @@ export default function Repetition() {
                     {/* Bouton supprimer */}
                     <button
                       onClick={() => { if (confirm(`Supprimer "${song.name}" ?`)) deleteSongWithFiles(song.id) }}
-                      className="px-2.5 py-3 text-red-400 hover:text-red-600"
+                      className="px-2.5 py-3.5 text-red-400 hover:text-red-600"
                     >🗑</button>
                   </>
                 )}

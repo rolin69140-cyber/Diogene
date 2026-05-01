@@ -41,3 +41,19 @@ body {
   width: 100%;
   height: 100%;
 }
+
+/* Safe-area bottom spacer pour bottom nav + indicateur home iOS/Android */
+.pb-nav-safe {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Input search — supprime l'icône native sur iOS/Chrome */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+/* Transitions globales fluides */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
