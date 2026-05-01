@@ -375,7 +375,12 @@ export default function Repetition() {
       </div>
       )}
 
-      {/* Modals */}
+      </div>{/* fin relative z-10 */}
+
+      {/* Modals — en dehors du div z-10 pour éviter le problème de stacking context :
+          relative z-10 confine ses enfants à z-10 dans le contexte global, ce qui
+          placerait les modales DERRIÈRE la barre de nav (z-50 au niveau racine).
+          Ici, elles sont dans le div racine sans z-index → leur z-50 est global. */}
       {playerState?.isOpen && (
         <Suspense fallback={null}>
           <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} onClose={closePlayer} />
@@ -403,7 +408,6 @@ export default function Repetition() {
           />
         ) : null
       })()}
-      </div>
     </div>
   )
 }
