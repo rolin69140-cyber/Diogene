@@ -1,4 +1,4 @@
-// Vercel Serverless Function — proxy audio Firebase Storage
+// Vercel Serverless Function — proxy Firebase Storage (audio + PDF)
 // Contourne les restrictions CORS pour la transposition (Tone.js / Web Audio API)
 //
 // Usage : GET /api/audio-proxy?url=https://firebasestorage.googleapis.com/...

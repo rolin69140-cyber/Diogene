@@ -135,10 +135,12 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
     let blobUrl = null
     getPdfFile(fileId).then((record) => {
       if (record) {
+        // Fichier local IndexedDB → blob URL same-origin, pas de CORS
         const blob = new Blob([record.data], { type: 'application/pdf' })
         blobUrl = URL.createObjectURL(blob)
         setPdfUrl(blobUrl)
       } else if (selectedPdf.storageUrl) {
+        // Firebase Storage → PDF.js fera fetch via proxy dans PdfViewer (resolveUrl)
         setPdfUrl(selectedPdf.storageUrl)
       }
     })
