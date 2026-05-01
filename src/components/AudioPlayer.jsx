@@ -27,6 +27,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   const addMarker = useStore((s) => s.addMarker)
   const removeMarker = useStore((s) => s.removeMarker)
   const settings = useStore((s) => s.settings)
+  const openLyrics = useStore((s) => s.openLyrics)
 
   const song = songs.find((s) => s.id === songId)
   const button = song?.audioButtons?.find((b) => b.id === buttonId)
@@ -416,6 +417,38 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             ))}
           </div>
         </div>
+
+        {/* Paroles / PDF */}
+        {(() => {
+          const songPdfs = song?.pdfFiles?.length > 0
+            ? song.pdfFiles
+            : (song?.lyricsFileId ? [{ id: song.lyricsFileId, label: 'Paroles' }] : [])
+          const hasLyrics = !!(song?.lyricsText || songPdfs.length > 0)
+          if (!hasLyrics) return null
+          if (songPdfs.length <= 1) {
+            return (
+              <button
+                onClick={() => { onClose(); openLyrics(songId, songPdfs[0]?.id) }}
+                className="w-full py-2 mb-3 text-sm font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 rounded-xl"
+              >
+                📄 {songPdfs[0]?.label || 'Paroles'}
+              </button>
+            )
+          }
+          return (
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {songPdfs.map((pdf) => (
+                <button
+                  key={pdf.id}
+                  onClick={() => { onClose(); openLyrics(songId, pdf.id) }}
+                  className="flex-1 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 rounded-xl whitespace-nowrap"
+                >
+                  📄 {pdf.label}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* Métronome */}
         <button

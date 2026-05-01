@@ -7,7 +7,7 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import NotesModal from '../components/NotesModal'
 import DirectorNotesModal from '../components/DirectorNotesModal'
 import SetPlaybackModal from '../components/SetPlaybackModal'
-import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/attackSynth'
+import { noteStrToFreq, startHoldNote } from '../lib/attackSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -28,14 +28,12 @@ export default function Repetition() {
   const activeSongId = useStore((s) => s.activeSongId)
   const setActiveSong = useStore((s) => s.setActiveSong)
   const openPlayer = useStore((s) => s.openPlayer)
-  const openLyrics = useStore((s) => s.openLyrics)
   const playerState = useStore((s) => s.playerState)
   const lyricsState = useStore((s) => s.lyricsState)
   const closePlayer = useStore((s) => s.closePlayer)
   const closeLyrics = useStore((s) => s.closeLyrics)
 
   const [search, setSearch] = useState('')
-  const [menuOpen, setMenuOpen] = useState(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [notesSongId, setNotesSongId]         = useState(null) // modal prise de notes
   const [directorSongId, setDirectorSongId]   = useState(null) // modal chef de chœur
@@ -146,7 +144,7 @@ export default function Repetition() {
             const hint = activeSong?.buttonHints?.[p]
 
             return (
-              <div key={p} className="relative flex flex-col items-center gap-1">
+              <div key={p} className="relative flex flex-col items-center">
                 {/* Bouton principal — tap = note courte, maintenir = note tenue */}
                 <button
                   style={{ backgroundColor: color, fontSize: displayLabel.length > 6 ? Math.min(13, baseFontSize) : displayLabel.length > 4 ? Math.min(16, baseFontSize) : displayLabel.length > 2 ? Math.min(18, baseFontSize) : baseFontSize, lineHeight: 1.2 }}
@@ -164,49 +162,6 @@ export default function Repetition() {
                   {displayLabel}
                   {hasAudio && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white/60" />}
                 </button>
-
-                {/* Flèche menu — uniquement si chant sélectionné avec audio ou paroles */}
-                {activeSong && (hasAudio || hasLyrics) && (
-                  <button
-                    className="text-gray-400 text-xs px-2 py-0.5"
-                    onClick={() => setMenuOpen(menuOpen === p ? null : p)}
-                  >▼</button>
-                )}
-
-                {/* Menu déroulant */}
-                {menuOpen === p && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
-                    <div className="absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-44 right-0 left-auto">
-                      <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        onClick={() => { playPupitre(notes, settings.instrumentAttaque || 'piano', activeSong?.bpm); setMenuOpen(null) }}>
-                        🎵 Jouer la note
-                      </button>
-                      {hasAudio && (
-                        <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => {
-                            const btn = activeSong.audioButtons.find((b) => b.pupitres?.includes(p))
-                            if (btn) { openPlayer(activeSong.id, btn.id) }
-                            setMenuOpen(null)
-                          }}>
-                          🔊 Ouvrir le fichier son
-                        </button>
-                      )}
-                      {hasLyrics && songPdfs.length <= 1 && (
-                        <button className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => { openLyrics(activeSong.id); setMenuOpen(null) }}>
-                          📄 {songPdfs[0]?.label || 'Paroles'}
-                        </button>
-                      )}
-                      {songPdfs.length > 1 && songPdfs.map((pdf) => (
-                        <button key={pdf.id} className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => { openLyrics(activeSong.id, pdf.id); setMenuOpen(null) }}>
-                          📄 {pdf.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
             )
           })}
