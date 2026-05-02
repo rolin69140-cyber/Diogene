@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import useStore from '../store/index'
+import { generateUUID } from '../store/index'
 import { subscribeSongs, subscribeSets, subscribeAppConfig, saveSong as fbSaveSong, saveSet as fbSaveSet } from '../lib/firebaseSync'
 import { FIREBASE_ENABLED as FB } from '../lib/firebase'
 
@@ -33,6 +34,16 @@ export default function useFirebaseSync() {
   const unsubConfig = useRef(null)
 
   useEffect(() => {
+    // ── Migration deviceId ─────────────────────────────────────────────────────
+    // Zustand persist fait un merge shallow : settings du localStorage remplace
+    // entièrement le settings initial. Les utilisateurs existants n'ont pas deviceId.
+    // On le génère ici au premier démarrage après mise à jour.
+    // ✅ iOS Safari ✅ Android Chrome : generateUUID() avec fallback (voir store/index.js)
+    const { deviceId } = useStore.getState().settings
+    if (!deviceId) {
+      updateSettings({ deviceId: generateUUID() })
+    }
+
     if (!FB) {
       setSyncReady(true)
       return

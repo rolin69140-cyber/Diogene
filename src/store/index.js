@@ -103,6 +103,19 @@ export async function getPdfFile(id) {
   }
 }
 
+// ─── UUID helper ─────────────────────────────────────────────────────────────
+// ✅ iOS Safari 15.4+ : crypto.randomUUID() natif
+// ✅ iOS Safari < 15.4 + Android < Chrome 92 : fallback Math.random
+export function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 export const PUPITRES = ['B', 'A', 'S', 'T']
 export const PUPITRE_LABELS = { B: 'Basses', A: 'Altis', S: 'Sopranos', T: 'Ténors' }
@@ -312,7 +325,7 @@ const useStore = create(
       songs: [],
 
       addSong: (song) => {
-        const newSong = { ...song, id: song.id || crypto.randomUUID() }
+        const newSong = { ...song, id: song.id || generateUUID() }
         set((s) => ({ songs: [...s.songs, newSong] }))
         fbSaveSong(toCloud(newSong)).catch((e) => console.warn('[Firebase] addSong sync:', e))
       },
@@ -363,7 +376,7 @@ const useStore = create(
       addAudioButton: (songId, button) => set((s) => ({
         songs: s.songs.map((song) =>
           song.id === songId
-            ? { ...song, audioButtons: [...(song.audioButtons || []), { ...button, id: button.id || crypto.randomUUID() }] }
+            ? { ...song, audioButtons: [...(song.audioButtons || []), { ...button, id: button.id || generateUUID() }] }
             : song
         )
       })),
@@ -408,7 +421,7 @@ const useStore = create(
       addPdfToSong: (songId, pdf) => set((s) => ({
         songs: s.songs.map((song) =>
           song.id === songId
-            ? { ...song, pdfFiles: [...(song.pdfFiles || []), { ...pdf, id: pdf.id || crypto.randomUUID() }] }
+            ? { ...song, pdfFiles: [...(song.pdfFiles || []), { ...pdf, id: pdf.id || generateUUID() }] }
             : song
         )
       })),
@@ -442,12 +455,13 @@ const useStore = create(
       addSet: (setData) => set((s) => ({
         sets: [...s.sets, {
           ...setData,
-          id: setData.id || crypto.randomUUID(),
+          id: setData.id || generateUUID(),
           archived: false,
           arrangements: {},
           markers: {},
           annotations: {},
           // Identifiant d'appareil du créateur — pour le filtrage public/privé
+          // s.settings.deviceId est toujours défini (migré au démarrage dans useFirebaseSync)
           creatorDeviceId: setData.creatorDeviceId || s.settings.deviceId,
           // 'private' par défaut ; 'public' si l'accès est déverrouillé et que le créateur le choisit
           visibility: setData.visibility || 'private',
@@ -476,7 +490,7 @@ const useStore = create(
         sets: s.sets.map((st) => {
           if (st.id !== setId) return st
           const prev = (st.markers?.[songId] || [])
-          return { ...st, markers: { ...st.markers, [songId]: [...prev, { ...marker, id: marker.id || crypto.randomUUID() }] } }
+          return { ...st, markers: { ...st.markers, [songId]: [...prev, { ...marker, id: marker.id || generateUUID() }] } }
         })
       })),
 
@@ -523,9 +537,8 @@ const useStore = create(
         bgOpacity: 0.12,             // opacité du fond décoratif (0 = aucun, 1 = plein)
         directorPin: '',             // PIN chef de chœur (vide = non protégé)
         lastBackupDate: null,        // ISO date de la dernière sauvegarde JSON
-        deviceId: crypto.randomUUID(), // identifiant unique de l'appareil (persisté)
-        unlockedCodeVersion: null,   // code utilisé lors du dernier déverrouillage (persisté)
-                                     // null = non mémorisé ; valeur = accès mémorisé
+        deviceId: null,              // UUID appareil — généré au démarrage si absent (voir useFirebaseSync)
+        unlockedCodeVersion: null,   // code mémorisé lors du dernier déverrouillage (persisté)
       },
 
       updateSettings: (updates) => set((s) => ({

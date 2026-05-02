@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { saveAudioFile, savePdfFile, detectAudioPrefix } from '../store/index'
+import { saveAudioFile, savePdfFile, detectAudioPrefix, generateUUID } from '../store/index'
 import useStore from '../store/index'
 import {
   uploadAudioFile,
@@ -96,7 +96,7 @@ export default function useImportAudio() {
       const file = allFiles[i]
       setImportProgress(`Analyse ${i + 1} / ${total} : ${file.name}`)
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-      const fileId = crypto.randomUUID()
+      const fileId = generateUUID()
 
       if (isPdf) {
         const { songName, label } = detectPdfSongAndLabel(file.name)
@@ -173,7 +173,7 @@ export default function useImportAudio() {
         label = `${label} 2`
       }
 
-      const pdfEntry = { id: crypto.randomUUID(), fileId: pdf.fileId, name: pdf.fileName, label, storageUrl: null }
+      const pdfEntry = { id: generateUUID(), fileId: pdf.fileId, name: pdf.fileName, label, storageUrl: null }
       useStore.getState().addPdfToSong(matched.id, pdfEntry)
 
       try {
@@ -214,7 +214,7 @@ export default function useImportAudio() {
       let song = songs.find((s) => s.name.normalize('NFC').toLowerCase() === key)
 
       const newButtons = items.map((item) => ({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         label: item.button,
         pupitres: item.pupitres,
         fileId: item.fileId,
@@ -224,7 +224,7 @@ export default function useImportAudio() {
 
       let songId
       if (!song) {
-        const newId = crypto.randomUUID()
+        const newId = generateUUID()
         songId = newId
         addSong({ id: newId, name, audioButtons: [], attackNotes: {} })
         for (const btn of newButtons) addAudioButton(newId, btn)
@@ -282,7 +282,7 @@ export default function useImportAudio() {
             label = `${label} 2`
           }
           useStore.getState().addPdfToSong(matchedSong.id, {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             fileId: pdf.fileId,
             name: pdf.fileName,
             label,
@@ -365,7 +365,7 @@ export default function useImportAudio() {
     for (const file of fileList) {
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         const arrayBuffer = await readFileAsArrayBuffer(file)
-        const fileId = crypto.randomUUID()
+        const fileId = generateUUID()
         await savePdfFile(fileId, arrayBuffer, file.name)
 
         // Upload vers Firebase Storage
@@ -429,7 +429,7 @@ export default function useImportAudio() {
       }
 
       const pdfEntry = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         fileId: item.fileId,
         name: item.name,
         label: item.label,

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import useStore from '../store/index'
-import { deleteAudioFile } from '../store/index'
+import { deleteAudioFile, generateUUID } from '../store/index'
 import {
   deleteSong  as fbDeleteSong,
   deleteAudioFile as fbDeleteAudio,
@@ -94,7 +94,7 @@ export default function useLibrary() {
   const addSet = useCallback(async (setData) => {
     const newSet = {
       ...setData,
-      id: setData.id || crypto.randomUUID(),
+      id: setData.id || generateUUID(),
       archived: false,
       arrangements: {},
       markers: {},
