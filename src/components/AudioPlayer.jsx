@@ -405,7 +405,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
         {/* Transposition */}
         <div className="mb-4">
-          <p className="text-xs text-gray-500 mb-1.5">Transposition <span className="text-gray-400">(modifie légèrement le tempo)</span></p>
+          <p className="text-xs text-gray-500 mb-1.5">Transposition <span className="text-gray-400">(tempo inchangé)</span></p>
           <div className="flex gap-1.5">
             {TRANSPOSES.map((t) => (
               <button
