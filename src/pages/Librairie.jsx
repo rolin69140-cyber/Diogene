@@ -896,6 +896,8 @@ function NewSetForm({ songs, onSave, onCancel }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [type, setType] = useState('repetition')
   const [selectedSongs, setSelectedSongs] = useState([])
+  const [visibility, setVisibility] = useState('private')
+  const directorUnlocked = useStore((s) => s.directorUnlocked)
 
   const toggleSong = (id) => setSelectedSongs((prev) =>
     prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
@@ -915,6 +917,21 @@ function NewSetForm({ songs, onSave, onCancel }) {
           <option value="concert">Concert</option>
         </select>
       </div>
+      {directorUnlocked && (
+        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+          <span className="text-xs text-gray-500 flex-1">Visibilité du set</span>
+          <button
+            type="button"
+            onClick={() => setVisibility('private')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visibility === 'private' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+          >🔒 Privé</button>
+          <button
+            type="button"
+            onClick={() => setVisibility('public')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visibility === 'public' ? 'bg-green-600 text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+          >🌍 Public</button>
+        </div>
+      )}
       <p className="text-xs text-gray-500 mb-2">Chants :</p>
       <div className="max-h-40 overflow-y-auto space-y-1 mb-3 border rounded-lg p-2 dark:border-gray-700">
         {songs.sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
@@ -926,7 +943,7 @@ function NewSetForm({ songs, onSave, onCancel }) {
       </div>
       <div className="flex gap-2">
         <button
-          onClick={() => { if (!name.trim()) return; onSave({ name, date, type, songIds: selectedSongs }) }}
+          onClick={() => { if (!name.trim()) return; onSave({ name, date, type, songIds: selectedSongs, visibility }) }}
           className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
         >Créer</button>
         <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500">Annuler</button>
@@ -984,7 +1001,12 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
         onClick={() => setExpanded((v) => !v)}
       >
         <div>
-          <p className="font-medium text-sm">{set.name}</p>
+          <p className="font-medium text-sm flex items-center gap-2">
+            {set.name}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${set.visibility === 'public' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+              {set.visibility === 'public' ? '🌍 Public' : '🔒 Privé'}
+            </span>
+          </p>
           <p className="text-xs text-gray-400">{typeLabel} — {set.date} — {setSongs.length} chants</p>
         </div>
         <span className="text-gray-400">{expanded ? '▲' : '▼'}</span>
@@ -1012,6 +1034,18 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
                   ${isActive ? 'bg-blue-600 text-white' : 'border border-blue-500 text-blue-600'}`}
               >
                 {isActive ? '✓ Set actif' : 'Activer pour le concert'}
+              </button>
+            )}
+            {directorUnlocked && (
+              <button
+                onClick={() => onUpdate({ visibility: set.visibility === 'public' ? 'private' : 'public' })}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  set.visibility === 'public'
+                    ? 'border-green-400 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {set.visibility === 'public' ? '🌍 Rendre privé' : '🌍 Rendre public'}
               </button>
             )}
             <button

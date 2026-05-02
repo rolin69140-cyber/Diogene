@@ -440,7 +440,18 @@ const useStore = create(
       sets: [],
 
       addSet: (setData) => set((s) => ({
-        sets: [...s.sets, { ...setData, id: setData.id || crypto.randomUUID(), archived: false, arrangements: {}, markers: {}, annotations: {} }]
+        sets: [...s.sets, {
+          ...setData,
+          id: setData.id || crypto.randomUUID(),
+          archived: false,
+          arrangements: {},
+          markers: {},
+          annotations: {},
+          // Identifiant d'appareil du créateur — pour le filtrage public/privé
+          creatorDeviceId: setData.creatorDeviceId || s.settings.deviceId,
+          // 'private' par défaut ; 'public' si l'accès est déverrouillé et que le créateur le choisit
+          visibility: setData.visibility || 'private',
+        }]
       })),
 
       updateSet: (id, updates) => set((s) => ({
@@ -512,13 +523,18 @@ const useStore = create(
         bgOpacity: 0.12,             // opacité du fond décoratif (0 = aucun, 1 = plein)
         directorPin: '',             // PIN chef de chœur (vide = non protégé)
         lastBackupDate: null,        // ISO date de la dernière sauvegarde JSON
+        deviceId: crypto.randomUUID(), // identifiant unique de l'appareil (persisté)
+        unlockedCodeVersion: null,   // code utilisé lors du dernier déverrouillage (persisté)
+                                     // null = non mémorisé ; valeur = accès mémorisé
       },
 
       updateSettings: (updates) => set((s) => ({
         settings: { ...s.settings, ...updates }
       })),
 
-      // ── Mode chef de chœur (non persisté — session uniquement) ─────────────
+      // ── Mode chef de chœur ────────────────────────────────────────────────────
+      // directorUnlocked : non persisté (session), mais restauré au démarrage si
+      // unlockedCodeVersion === directorPin (voir useFirebaseSync).
       directorUnlocked: false,
 
       unlockDirector: (pin) => {
@@ -526,12 +542,19 @@ const useStore = create(
         // Si aucun PIN défini, accès libre ; sinon on vérifie
         if (!stored || pin === stored) {
           set({ directorUnlocked: true })
+          // Mémoriser le code sur l'appareil → sera restauré au prochain démarrage
+          // tant que le code Firebase n'a pas changé
+          get().updateSettings({ unlockedCodeVersion: stored || '__no_pin__' })
           return true
         }
         return false
       },
 
-      lockDirector: () => set({ directorUnlocked: false }),
+      lockDirector: () => {
+        set({ directorUnlocked: false })
+        // Effacer la mémorisation → ne pas restaurer au prochain démarrage
+        get().updateSettings({ unlockedCodeVersion: null })
+      },
 
       // ── Export / Import ────────────────────────────────────────────────────
       exportConfig: () => {

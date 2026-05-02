@@ -17,7 +17,7 @@ const PUPITRES_CONFIG = [
 
 
 export default function Concert() {
-  const sets = useStore((s) => s.sets)
+  const allSets = useStore((s) => s.sets)
   const songs = useStore((s) => s.songs)
   const playerState = useStore((s) => s.playerState)
   const lyricsState = useStore((s) => s.lyricsState)
@@ -27,6 +27,11 @@ export default function Concert() {
   const closeLyrics = useStore((s) => s.closeLyrics)
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
+
+  // Sets visibles : publics + ceux créés sur cet appareil + anciens sans creatorDeviceId (rétrocompat)
+  const sets = allSets.filter((s) =>
+    s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId
+  )
 
   const [menuOpen, setMenuOpen] = useState(null)
   const [voiceFilter, setVoiceFilter] = useState(['B', 'A', 'S', 'T'])

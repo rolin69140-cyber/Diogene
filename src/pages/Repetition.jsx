@@ -22,8 +22,12 @@ const PUPITRES_CONFIG = [
 
 export default function Repetition() {
   const songs = useStore((s) => s.songs)
-  const sets = useStore((s) => s.sets)
+  const allSets = useStore((s) => s.sets)
   const settings = useStore((s) => s.settings)
+  // Sets visibles : publics + ceux créés sur cet appareil + anciens sans creatorDeviceId (rétrocompat)
+  const sets = allSets.filter((s) =>
+    s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId
+  )
   const { deleteSongWithFiles } = useLibrary()
   const activeSongId = useStore((s) => s.activeSongId)
   const setActiveSong = useStore((s) => s.setActiveSong)

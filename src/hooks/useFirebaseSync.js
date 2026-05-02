@@ -87,6 +87,25 @@ export default function useFirebaseSync() {
       // Sync du PIN directeur vers le store local (partagé via Firebase pour tous les appareils)
       if (typeof cfg.directorPin === 'string') {
         updateSettings({ directorPin: cfg.directorPin })
+
+        // ── Auto-revoke / auto-restore ──────────────────────────────────────
+        // On compare le code Firebase avec la version mémorisée sur l'appareil.
+        const { unlockedCodeVersion } = useStore.getState().settings
+        const storedVersion = unlockedCodeVersion
+
+        if (!storedVersion) {
+          // Pas de mémorisation → ne rien faire (accès non accordé)
+        } else {
+          const expectedVersion = cfg.directorPin || '__no_pin__'
+          if (storedVersion === expectedVersion) {
+            // Code inchangé → restaurer l'accès silencieusement
+            useStore.setState({ directorUnlocked: true })
+          } else {
+            // Code changé → révoquer l'accès et effacer la mémorisation
+            useStore.setState({ directorUnlocked: false })
+            updateSettings({ unlockedCodeVersion: null })
+          }
+        }
       }
     })
 
