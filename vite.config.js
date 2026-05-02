@@ -38,6 +38,24 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
             options: { cacheName: 'google-fonts-cache' }
+          },
+          {
+            // Salamander Grand Piano (Piano samples — CC-BY)
+            urlPattern: /^https:\/\/tonejs\.github\.io\/audio\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'audio-samples-piano',
+              expiration: { maxEntries: 60, maxAgeSeconds: 365 * 24 * 60 * 60 }
+            }
+          },
+          {
+            // FluidR3_GM choir_aahs (Chœur samples — MIT)
+            urlPattern: /^https:\/\/gleitz\.github\.io\/midi-js-soundfonts\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'audio-samples-choir',
+              expiration: { maxEntries: 30, maxAgeSeconds: 365 * 24 * 60 * 60 }
+            }
           }
         ]
       }

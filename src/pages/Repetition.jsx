@@ -7,7 +7,7 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import NotesModal from '../components/NotesModal'
 import DirectorNotesModal from '../components/DirectorNotesModal'
 import SetPlaybackModal from '../components/SetPlaybackModal'
-import { noteStrToFreq, startHoldNote } from '../lib/attackSynth'
+import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))

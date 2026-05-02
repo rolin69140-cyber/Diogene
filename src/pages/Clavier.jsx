@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import useStore from '../store/index'
-import { playNote as synthPlayNote, startHoldNote } from '../lib/attackSynth'
+import { playNote as synthPlayNote, startHoldNote } from '../lib/sampleSynth'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe']
 

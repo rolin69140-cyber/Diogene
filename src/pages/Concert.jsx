@@ -3,7 +3,7 @@ import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
-import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/attackSynth'
+import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/sampleSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
