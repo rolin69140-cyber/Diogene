@@ -1,6 +1,7 @@
 /**
  * SetPlaybackModal
- * Lecture enchaînée des morceaux d'un set avec sélection de la piste par morceau.
+ * Lecture enchaînée des morceaux d'un set avec sélection multi-pistes par morceau.
+ * - Plusieurs voix peuvent être sélectionnées simultanément pour chaque chant
  * - 5 s de silence entre les morceaux
  * - Fallback : piste du pupitre de l'utilisateur
  * - Popup si aucune piste disponible pour un morceau
@@ -16,29 +17,47 @@ const GAP_SECONDS = 5
 function bestButtonForPupitre(song, pupitre) {
   const btns = song.audioButtons || []
   if (!btns.length) return null
-  // Exact match sur le pupitre
   const exact = btns.find((b) => b.pupitres?.includes(pupitre))
   if (exact) return exact
-  // Tutti (pupitres = tous ou vide)
   const tutti = btns.find((b) => !b.pupitres?.length || b.pupitres.length >= 4)
   if (tutti) return tutti
-  // N'importe laquelle
   return btns[0]
+}
+
+// Couleur d'un bouton audio (selon son pupitre associé)
+function btnColor(btn) {
+  return btn.pupitres?.length === 1 ? (PUPITRE_COLORS[btn.pupitres[0]] || '#6B7280') : '#6B7280'
 }
 
 export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
 
-  // ── Sélection des pistes ──────────────────────────────────────────────────
-  // trackMap : { songId → buttonId | null }
+  // ── Sélection multi-pistes ────────────────────────────────────────────────
+  // trackMap : { songId → string[] }  (tableau d'ids de boutons sélectionnés)
   const [trackMap, setTrackMap] = useState(() => {
     const map = {}
     setSongs.forEach((song) => {
       const btn = bestButtonForPupitre(song, userPupitre)
-      map[song.id] = btn?.id || null
+      map[song.id] = btn ? [btn.id] : []
     })
     return map
   })
+
+  // Toggle une piste pour un chant (case à cocher)
+  const toggleTrack = (songId, btnId) => {
+    setTrackMap((m) => {
+      const current = m[songId] || []
+      const next = current.includes(btnId)
+        ? current.filter((id) => id !== btnId)
+        : [...current, btnId]
+      return { ...m, [songId]: next }
+    })
+  }
+
+  // Déselectionner toutes les pistes d'un chant (= "Passer")
+  const skipSong = (songId) => {
+    setTrackMap((m) => ({ ...m, [songId]: [] }))
+  }
 
   const [screen, setScreen] = useState('config') // 'config' | 'playing'
 
@@ -46,20 +65,22 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   const [currentIdx, setCurrentIdx]     = useState(0)
   const [isPlaying, setIsPlaying]       = useState(false)
   const [isLooping, setIsLooping]       = useState(false)
-  const [gapCountdown, setGapCountdown] = useState(null) // null | number
-  const [noTrackSong, setNoTrackSong]   = useState(null) // nom du morceau sans piste
+  const [gapCountdown, setGapCountdown] = useState(null)
+  const [noTrackSong, setNoTrackSong]   = useState(null)
   const [elapsed, setElapsed]           = useState(0)
   const [duration, setDuration]         = useState(0)
 
-  const audioRef   = useRef(null)
-  const gapTimerRef = useRef(null)
-  const gapCountRef = useRef(null)
-  const playingRef  = useRef(false)
-  const loopRef     = useRef(false)
-  const idxRef      = useRef(0)
+  const audioRef           = useRef(null)    // piste primaire (events, progress)
+  const secondaryAudiosRef = useRef([])      // pistes secondaires
+  const blobUrlsRef        = useRef([])      // URLs blob à révoquer
+  const gapTimerRef        = useRef(null)
+  const gapCountRef        = useRef(null)
+  const playingRef         = useRef(false)
+  const loopRef            = useRef(false)
+  const idxRef             = useRef(0)
 
-  loopRef.current   = isLooping
-  idxRef.current    = currentIdx
+  loopRef.current = isLooping
+  idxRef.current  = currentIdx
 
   const clearGap = () => {
     clearTimeout(gapTimerRef.current)
@@ -67,73 +88,98 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     setGapCountdown(null)
   }
 
+  // Arrête et nettoie toutes les pistes secondaires + blob URLs
+  const cleanupSecondary = () => {
+    secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
+    secondaryAudiosRef.current = []
+    blobUrlsRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
+    blobUrlsRef.current = []
+  }
+
   // Charge et joue le morceau à l'index donné
   const playSongAtIndex = useCallback(async (idx) => {
     clearGap()
+    cleanupSecondary()
+
     const song = setSongs[idx]
     if (!song) return
 
-    const btnId = trackMap[song.id]
-    const btn   = song.audioButtons?.find((b) => b.id === btnId)
+    const selectedIds  = trackMap[song.id] || []
+    const selectedBtns = (song.audioButtons || []).filter((b) => selectedIds.includes(b.id))
 
-    if (!btn) {
+    if (selectedBtns.length === 0) {
       setNoTrackSong(song.name)
       setIsPlaying(false)
       playingRef.current = false
       return
     }
 
-    // Charge le fichier
-    let src = null
-    if (btn.storageUrl) {
-      src = btn.storageUrl
-    } else if (btn.fileId) {
-      try {
-        const record = await getAudioFile(btn.fileId)
-        if (record?.data) {
-          const blob = new Blob([record.data], { type: record.type || 'audio/mpeg' })
-          src = URL.createObjectURL(blob)
-        }
-      } catch (e) { console.warn('[SetPlayback] getAudioFile:', e) }
-    }
+    // ── Chargement de toutes les sources sélectionnées ────────────────────
+    const srcs = await Promise.all(selectedBtns.map(async (btn) => {
+      if (btn.storageUrl) return btn.storageUrl
+      if (btn.fileId) {
+        try {
+          const record = await getAudioFile(btn.fileId)
+          if (record?.data) {
+            const url = URL.createObjectURL(new Blob([record.data], { type: record.type || 'audio/mpeg' }))
+            blobUrlsRef.current.push(url)
+            return url
+          }
+        } catch (e) { console.warn('[SetPlayback] getAudioFile:', e) }
+      }
+      return null
+    }))
 
-    if (!src) {
+    const validSrcs = srcs.filter(Boolean)
+    if (validSrcs.length === 0) {
       setNoTrackSong(song.name)
       setIsPlaying(false)
       playingRef.current = false
       return
     }
 
-    const audio = audioRef.current
-    if (!audio) return
-    audio.src = src
-    audio.currentTime = 0
+    // ── Piste primaire ────────────────────────────────────────────────────
+    const primary = audioRef.current
+    if (!primary) return
+    primary.src          = validSrcs[0]
+    primary.currentTime  = 0
+
+    // ── Pistes secondaires ────────────────────────────────────────────────
+    secondaryAudiosRef.current = validSrcs.slice(1).map((src) => {
+      const a = new Audio()
+      a.src         = src
+      a.currentTime = 0
+      return a
+    })
+
     setElapsed(0)
     setDuration(0)
     setCurrentIdx(idx)
     idxRef.current = idx
 
     try {
-      await audio.play()
+      await Promise.all([
+        primary.play(),
+        ...secondaryAudiosRef.current.map((a) => a.play()),
+      ])
       setIsPlaying(true)
       playingRef.current = true
     } catch (e) {
       console.warn('[SetPlayback] play error:', e)
     }
-  }, [setSongs, trackMap])
+  }, [setSongs, trackMap]) // eslint-disable-line
 
-  // Quand un morceau se termine → gap 5 s → suivant (ou boucle)
+  // Quand la piste primaire se termine → gap 5 s → suivant (ou boucle)
   const handleEnded = useCallback(() => {
     if (!playingRef.current) return
+    secondaryAudiosRef.current.forEach((a) => { try { a.pause() } catch (_) {} })
     const nextIdx = idxRef.current + 1
     const hasNext = nextIdx < setSongs.length
-
     if (!hasNext && !loopRef.current) {
       setIsPlaying(false)
       playingRef.current = false
       return
     }
-
     const targetIdx = hasNext ? nextIdx : 0
     let count = GAP_SECONDS
     setGapCountdown(count)
@@ -147,14 +193,14 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     }, GAP_SECONDS * 1000)
   }, [setSongs.length, playSongAtIndex])
 
-  // Mise à jour du temps
+  // Mise à jour du temps (piste primaire)
   const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return
     setElapsed(audioRef.current.currentTime)
     setDuration(audioRef.current.duration || 0)
   }, [])
 
-  // Init audio element
+  // Init piste primaire
   useEffect(() => {
     const audio = new Audio()
     audio.addEventListener('ended', handleEnded)
@@ -166,11 +212,12 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
       audio.src = ''
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('timeupdate', handleTimeUpdate)
+      cleanupSecondary()
       clearGap()
     }
   }, []) // eslint-disable-line
 
-  // Réattacher les handlers si les callbacks changent
+  // Réattacher handleEnded si le callback change (trackMap mis à jour)
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -178,17 +225,22 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     audio.addEventListener('ended', handleEnded)
   }, [handleEnded])
 
+  // ── Contrôles ─────────────────────────────────────────────────────────────
+
   const handlePlayPause = () => {
     const audio = audioRef.current
     if (!audio) return
     if (isPlaying) {
       audio.pause()
+      secondaryAudiosRef.current.forEach((a) => a.pause())
       clearGap()
       setIsPlaying(false)
       playingRef.current = false
       setGapCountdown(null)
     } else {
       if (audio.src && audio.currentTime > 0 && audio.currentTime < (audio.duration || 0)) {
+        const t = audio.currentTime
+        secondaryAudiosRef.current.forEach((a) => { a.currentTime = t; a.play().catch(() => {}) })
         audio.play().catch(() => {})
         setIsPlaying(true)
         playingRef.current = true
@@ -201,6 +253,7 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   const handleNext = () => {
     clearGap()
     audioRef.current?.pause()
+    secondaryAudiosRef.current.forEach((a) => a.pause())
     const next = (idxRef.current + 1) % setSongs.length
     playSongAtIndex(next)
   }
@@ -220,7 +273,14 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
 
   const currentSong = setSongs[currentIdx]
 
-  // ── Rendu config ──────────────────────────────────────────────────────────
+  // Labels des voix sélectionnées pour le morceau en cours
+  const currentLabels = currentSong
+    ? (currentSong.audioButtons || [])
+        .filter((b) => (trackMap[currentSong.id] || []).includes(b.id))
+        .map((b) => b.label)
+    : []
+
+  // ── Écran de configuration ─────────────────────────────────────────────────
   if (screen === 'config') {
     return (
       <div className="fixed inset-0 z-[150] flex flex-col bg-white dark:bg-gray-950 md:left-16">
@@ -236,12 +296,15 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
           </button>
         </div>
 
-        {/* Liste morceaux + sélection piste */}
+        {/* Liste morceaux + sélection multi-pistes */}
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-6">
-          <p className="text-xs text-gray-400 mb-3">Choisissez la piste à écouter pour chaque morceau :</p>
+          <p className="text-xs text-gray-400 mb-3">
+            Choisissez une ou plusieurs voix à écouter pour chaque morceau :
+          </p>
           {setSongs.map((song, i) => {
-            const btns = song.audioButtons || []
-            const selectedId = trackMap[song.id]
+            const btns       = song.audioButtons || []
+            const selectedIds = trackMap[song.id] || []
+            const isSkipped   = selectedIds.length === 0
             return (
               <div key={song.id} className="mb-4">
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1.5">
@@ -252,15 +315,15 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {btns.map((btn) => {
-                      const isSelected = selectedId === btn.id
-                      const color = btn.pupitres?.length === 1
-                        ? PUPITRE_COLORS[btn.pupitres[0]] || '#6B7280'
-                        : '#6B7280'
+                      const isSelected = selectedIds.includes(btn.id)
+                      const color      = btnColor(btn)
                       return (
                         <button
                           key={btn.id}
-                          onClick={() => setTrackMap((m) => ({ ...m, [song.id]: btn.id }))}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${isSelected ? 'text-white' : 'bg-transparent opacity-60'}`}
+                          onClick={() => toggleTrack(song.id, btn.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
+                            isSelected ? 'text-white' : 'bg-transparent opacity-50'
+                          }`}
                           style={isSelected
                             ? { backgroundColor: color, borderColor: color }
                             : { color, borderColor: color }
@@ -270,13 +333,24 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
                         </button>
                       )
                     })}
+                    {/* Bouton "Passer" */}
                     <button
-                      onClick={() => setTrackMap((m) => ({ ...m, [song.id]: null }))}
-                      className={`px-3 py-1.5 rounded-xl text-xs border-2 transition-all ${!selectedId ? 'bg-gray-500 text-white border-gray-500' : 'text-gray-400 border-gray-300 opacity-60'}`}
+                      onClick={() => skipSong(song.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs border-2 transition-all ${
+                        isSkipped
+                          ? 'bg-gray-500 text-white border-gray-500'
+                          : 'text-gray-400 border-gray-300 dark:border-gray-600 opacity-60'
+                      }`}
                     >
                       Passer
                     </button>
                   </div>
+                )}
+                {/* Résumé des voix sélectionnées */}
+                {selectedIds.length > 1 && (
+                  <p className="text-xs text-blue-500 dark:text-blue-400 mt-1 pl-0.5">
+                    {selectedIds.length} voix sélectionnées
+                  </p>
                 )}
               </div>
             )
@@ -286,15 +360,23 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     )
   }
 
-  // ── Rendu lecture ─────────────────────────────────────────────────────────
+  // ── Écran de lecture ───────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-gray-950 text-white md:left-16">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <button onClick={() => { audioRef.current?.pause(); clearGap(); onClose() }} className="text-gray-400 text-sm">✕</button>
+        <button
+          onClick={() => {
+            audioRef.current?.pause()
+            secondaryAudiosRef.current.forEach((a) => a.pause())
+            clearGap()
+            onClose()
+          }}
+          className="text-gray-400 text-sm"
+        >✕</button>
         <h2 className="font-semibold text-sm">{set.name}</h2>
         <button
-          onClick={() => { setIsLooping((v) => !v) }}
+          onClick={() => setIsLooping((v) => !v)}
           className={`text-sm px-3 py-1 rounded-lg ${isLooping ? 'bg-blue-600 text-white' : 'text-gray-400 bg-gray-800'}`}
         >
           🔁
@@ -307,13 +389,26 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
           {currentIdx + 1} / {setSongs.length}
         </p>
         <h3 className="text-xl font-bold text-center mb-1">{currentSong?.name}</h3>
-        {currentSong && trackMap[currentSong.id] && (
-          <p className="text-xs text-blue-300 mb-6">
-            {currentSong.audioButtons?.find((b) => b.id === trackMap[currentSong.id])?.label}
-          </p>
+
+        {/* Voix en cours de lecture */}
+        {currentLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 justify-center mb-6">
+            {(currentSong?.audioButtons || [])
+              .filter((b) => (trackMap[currentSong.id] || []).includes(b.id))
+              .map((b) => (
+                <span
+                  key={b.id}
+                  className="text-xs font-medium px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: btnColor(b) + '33', color: btnColor(b), border: `1px solid ${btnColor(b)}66` }}
+                >
+                  {b.label}
+                </span>
+              ))
+            }
+          </div>
         )}
 
-        {/* Barre de progression — cliquable/glissable pour se déplacer */}
+        {/* Barre de progression */}
         <div className="w-full max-w-sm mb-2">
           <div
             className="h-4 flex items-center cursor-pointer group"
@@ -321,13 +416,15 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
               if (!duration) return
               e.currentTarget.setPointerCapture(e.pointerId)
               const seek = (ev) => {
-                const rect = ev.currentTarget.getBoundingClientRect()
+                const rect  = ev.currentTarget.getBoundingClientRect()
                 const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
-                if (audioRef.current) audioRef.current.currentTime = ratio * duration
+                const t     = ratio * duration
+                if (audioRef.current) audioRef.current.currentTime = t
+                secondaryAudiosRef.current.forEach((a) => { a.currentTime = t })
               }
               seek(e)
               const onMove = (ev) => seek(ev)
-              const onUp = () => {
+              const onUp   = () => {
                 e.currentTarget.removeEventListener('pointermove', onMove)
                 e.currentTarget.removeEventListener('pointerup', onUp)
               }
@@ -374,23 +471,38 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
 
       {/* Liste des morceaux */}
       <div className="border-t border-gray-800 max-h-48 overflow-y-auto">
-        {setSongs.map((song, i) => (
-          <button
-            key={song.id}
-            onClick={() => { clearGap(); audioRef.current?.pause(); playSongAtIndex(i) }}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
-              i === currentIdx ? 'bg-blue-900/50 text-blue-300' : 'text-gray-400 hover:bg-gray-800'
-            }`}
-          >
-            <span className="text-xs w-5 text-center">{i === currentIdx && (isPlaying || gapCountdown !== null) ? '▶' : i + 1}</span>
-            <span className="flex-1 truncate">{song.name}</span>
-            {trackMap[song.id] && (
-              <span className="text-xs opacity-60">
-                {song.audioButtons?.find((b) => b.id === trackMap[song.id])?.label}
+        {setSongs.map((song, i) => {
+          const selectedBtns = (song.audioButtons || []).filter((b) =>
+            (trackMap[song.id] || []).includes(b.id)
+          )
+          return (
+            <button
+              key={song.id}
+              onClick={() => {
+                clearGap()
+                audioRef.current?.pause()
+                secondaryAudiosRef.current.forEach((a) => a.pause())
+                playSongAtIndex(i)
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
+                i === currentIdx ? 'bg-blue-900/50 text-blue-300' : 'text-gray-400 hover:bg-gray-800'
+              }`}
+            >
+              <span className="text-xs w-5 text-center">
+                {i === currentIdx && (isPlaying || gapCountdown !== null) ? '▶' : i + 1}
               </span>
-            )}
-          </button>
-        ))}
+              <span className="flex-1 truncate">{song.name}</span>
+              {selectedBtns.length > 0 && (
+                <span className="text-xs opacity-60 flex gap-1">
+                  {selectedBtns.map((b) => b.label).join(' + ')}
+                </span>
+              )}
+              {(trackMap[song.id] || []).length === 0 && (
+                <span className="text-xs opacity-40 italic">passer</span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Popup morceau sans piste */}
@@ -403,7 +515,13 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => { setNoTrackSong(null); audioRef.current?.pause(); setIsPlaying(false); playingRef.current = false }}
+                onClick={() => {
+                  setNoTrackSong(null)
+                  audioRef.current?.pause()
+                  secondaryAudiosRef.current.forEach((a) => a.pause())
+                  setIsPlaying(false)
+                  playingRef.current = false
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-gray-600 text-sm text-gray-400"
               >
                 Stop
