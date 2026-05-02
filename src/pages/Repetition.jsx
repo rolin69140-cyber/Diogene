@@ -24,9 +24,10 @@ export default function Repetition() {
   const songs = useStore((s) => s.songs)
   const allSets = useStore((s) => s.sets)
   const settings = useStore((s) => s.settings)
-  // Sets visibles : publics + ceux créés sur cet appareil + anciens sans creatorDeviceId (rétrocompat)
+  // Sets visibles : type répétition (ou sans type = rétrocompat) + visibilité
   const sets = allSets.filter((s) =>
-    s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId
+    (!s.type || s.type === 'repetition') &&
+    (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
   const { deleteSongWithFiles } = useLibrary()
   const activeSongId = useStore((s) => s.activeSongId)

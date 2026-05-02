@@ -28,9 +28,10 @@ export default function Concert() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
 
-  // Sets visibles : publics + ceux créés sur cet appareil + anciens sans creatorDeviceId (rétrocompat)
+  // Sets visibles : type concert + visibilité + rétrocompat (sets anciens sans type → exclus ici)
   const sets = allSets.filter((s) =>
-    s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId
+    s.type === 'concert' &&
+    (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
 
   const [menuOpen, setMenuOpen] = useState(null)
