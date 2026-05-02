@@ -13,8 +13,12 @@
  *                                       destination
  *
  *     Avantages vs l'ancienne approche (createMediaElementSource) :
- *       ✅ iOS Safari — fetch blob local (direct) ou Firebase via proxy Vercel
- *       ✅ Android Chrome — même chemin proxy → CORS résolu
+ *       ✅ iOS Safari — fetch via proxy Vercel (CORS) + ToneBufferSource.connect()
+ *       ✅ Android Chrome — même chemin ; ToneBufferSource évite l'erreur AudioNode natif
+ *
+ *     Clé du fix : ToneBufferSource.connect(pitchShift) reste dans le graphe Tone.js.
+ *     rawCtx.createBufferSource().connect(pitchShift.input) échoue sur iOS/Android
+ *     car pitchShift.input est un objet Tone.Gain, pas un AudioNode natif.
  *       ✅ Tempo strictement préservé (phase vocoder Tone.js, aucun playbackRate)
  *       ✅ Seek / boucle / segment : recréation du AudioBufferSourceNode à la position voulue
  */
@@ -123,14 +127,14 @@ export default function useAudioPlayer() {
       try { bufSourceRef.current.stop()       } catch (_) {}
       try { bufSourceRef.current.disconnect() } catch (_) {}
     }
-    const rawCtx = Tone.getContext().rawContext
-    const source = rawCtx.createBufferSource()
-    source.buffer             = audioBufferRef.current
+    // ToneBufferSource → connexion Tone.js native (compatible iOS Safari et Android)
+    const source = new Tone.ToneBufferSource(audioBufferRef.current)
     source.playbackRate.value = speedRef.current
-    source.connect(pitchShiftRef.current.input)
+    source.connect(pitchShiftRef.current)
+    const rawCtx = Tone.getContext().rawContext
     bufStartCtxTimeRef.current = rawCtx.currentTime
     bufStartOffsetRef.current  = offset
-    source.start(0, offset)
+    source.start('+0', offset)
     bufSourceRef.current = source
     bufPlayingRef.current = true
   }, [])
@@ -340,28 +344,14 @@ export default function useAudioPlayer() {
         try { bufSourceRef.current.disconnect() } catch (_) {}
       }
 
-      const source = rawCtx.createBufferSource()
-      source.buffer             = audioBufferRef.current
+      // ToneBufferSource → connexion Tone.js native (compatible iOS Safari et Android)
+      const source = new Tone.ToneBufferSource(audioBufferRef.current)
       source.playbackRate.value = speedRef.current
-      source.connect(pitchShiftRef.current.input)
-
-      // Fin naturelle du buffer (si le RAF n'attrape pas la fin de segment)
-      source.addEventListener('ended', () => {
-        if (!bufPlayingRef.current) return
-        if (!loopRef.current) {
-          bufPlayingRef.current         = false
-          bufStartOffsetRef.current     = segStartRef.current
-          setIsPlaying(false)
-          isPlayingRef.current = false
-          setCurrentTime(segStartRef.current)
-          stopRaf()
-          console.log('[Pitch] AudioBuffer terminé naturellement ✓')
-        }
-      })
+      source.connect(pitchShiftRef.current)
 
       bufStartCtxTimeRef.current = rawCtx.currentTime
       bufStartOffsetRef.current  = startPos
-      source.start(0, startPos)
+      source.start('+0', startPos)
       bufSourceRef.current  = source
       bufPlayingRef.current = true
 
@@ -443,21 +433,12 @@ export default function useAudioPlayer() {
           try { bufSourceRef.current.disconnect() } catch (_) {}
         }
         const rawCtx = Tone.getContext().rawContext
-        const source = rawCtx.createBufferSource()
-        source.buffer             = audioBufferRef.current
+        // ToneBufferSource → connexion Tone.js native (compatible iOS Safari et Android)
+        const source = new Tone.ToneBufferSource(audioBufferRef.current)
         source.playbackRate.value = speedRef.current
-        source.connect(pitchShiftRef.current.input)
-        source.addEventListener('ended', () => {
-          if (!bufPlayingRef.current || loopRef.current) return
-          bufPlayingRef.current         = false
-          bufStartOffsetRef.current     = segStartRef.current
-          setIsPlaying(false)
-          isPlayingRef.current = false
-          setCurrentTime(segStartRef.current)
-          stopRaf()
-        })
+        source.connect(pitchShiftRef.current)
         bufStartCtxTimeRef.current = rawCtx.currentTime
-        source.start(0, time)
+        source.start('+0', time)
         bufSourceRef.current = source
         console.log(`[Pitch] seek() — source recréé à ${time.toFixed(2)}s ✓`)
       }
@@ -622,21 +603,12 @@ export default function useAudioPlayer() {
     // Démarrer AudioBuffer si lecture en cours
     if (isPlayingRef.current) {
       const rawCtx = Tone.getContext().rawContext
-      const source = rawCtx.createBufferSource()
-      source.buffer             = audioBufferRef.current
+      // ToneBufferSource → connexion Tone.js native (compatible iOS Safari et Android)
+      const source = new Tone.ToneBufferSource(audioBufferRef.current)
       source.playbackRate.value = speedRef.current
-      source.connect(pitchShiftRef.current.input)
-      source.addEventListener('ended', () => {
-        if (!bufPlayingRef.current || loopRef.current) return
-        bufPlayingRef.current         = false
-        bufStartOffsetRef.current     = segStartRef.current
-        setIsPlaying(false)
-        isPlayingRef.current = false
-        setCurrentTime(segStartRef.current)
-        stopRaf()
-      })
+      source.connect(pitchShiftRef.current)
       bufStartCtxTimeRef.current = rawCtx.currentTime
-      source.start(0, currentPos)
+      source.start('+0', currentPos)
       bufSourceRef.current  = source
       bufPlayingRef.current = true
       startRaf()
