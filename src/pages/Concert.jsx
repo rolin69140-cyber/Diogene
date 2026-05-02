@@ -4,7 +4,7 @@ import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
 import SetPlaybackModal from '../components/SetPlaybackModal'
-import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/sampleSynth'
+import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -35,7 +35,6 @@ export default function Concert() {
     (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
 
-  const [menuOpen, setMenuOpen] = useState(null)
   const [voiceFilter, setVoiceFilter] = useState(['B', 'A', 'S', 'T'])
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
@@ -103,13 +102,11 @@ export default function Concert() {
   const goToSong = (idx) => {
     setActiveSongIdx(Math.max(0, Math.min(setSongs.length - 1, idx)))
     setVoiceFilter(availablePupitres.length > 0 ? availablePupitres : ['B', 'A', 'S', 'T'])
-    setMenuOpen(null)
   }
 
   const selectSet = (id) => {
     setActiveSetId(id)
     setActiveSongIdx(0)
-    setMenuOpen(null)
   }
 
   return (
@@ -175,42 +172,6 @@ export default function Concert() {
                   {btnLabel}
                   {hasAudio && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white/60" />}
                 </button>
-                {currentSong && (hasAudio || hasLyrics) && (
-                  <button className="text-gray-400 text-xs px-2 py-0.5"
-                    onClick={() => setMenuOpen(menuOpen === p ? null : p)}>▼</button>
-                )}
-                {menuOpen === p && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
-                    <div className="absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-44 right-0 left-auto">
-                      <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        onClick={() => { playPupitre(notes, settings.instrumentAttaque || 'piano', currentSong?.bpm); setMenuOpen(null) }}>
-                        🎵 Jouer la note
-                      </button>
-                      {hasAudio && (
-                        <button className="w-full px-4 py-3 text-left text-sm border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => {
-                            const btn = currentSong.audioButtons.find((b) => b.pupitres?.includes(p))
-                            if (btn) openPlayer(currentSong.id, btn.id)
-                            setMenuOpen(null)
-                          }}>🔊 Ouvrir le fichier son
-                        </button>
-                      )}
-                      {hasLyrics && songPdfs.length <= 1 && (
-                        <button className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => { openLyrics(currentSong.id); setMenuOpen(null) }}>
-                          📄 {songPdfs[0]?.label || 'Paroles'}
-                        </button>
-                      )}
-                      {songPdfs.length > 1 && songPdfs.map((pdf) => (
-                        <button key={pdf.id} className="w-full px-4 py-3 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onClick={() => { openLyrics(currentSong.id, pdf.id); setMenuOpen(null) }}>
-                          📄 {pdf.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
             )
           })}
