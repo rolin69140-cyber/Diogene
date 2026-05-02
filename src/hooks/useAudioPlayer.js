@@ -13,9 +13,8 @@
  *                                       destination
  *
  *     Avantages vs l'ancienne approche (createMediaElementSource) :
- *       ✅ iOS Safari — pas de CORS : fetch d'un blob same-origin ou d'une URL
- *          Firebase (GET complet, pas de Range request → CORS OK)
- *       ✅ Android Chrome — pas de proxy Vercel nécessaire
+ *       ✅ iOS Safari — fetch blob local (direct) ou Firebase via proxy Vercel
+ *       ✅ Android Chrome — même chemin proxy → CORS résolu
  *       ✅ Tempo strictement préservé (phase vocoder Tone.js, aucun playbackRate)
  *       ✅ Seek / boucle / segment : recréation du AudioBufferSourceNode à la position voulue
  */
@@ -558,15 +557,24 @@ export default function useAudioPlayer() {
 
     // Décoder l'AudioBuffer si nécessaire (nouveau fichier ou 1re transposition)
     if (!bufferReadyRef.current) {
-      const url = blobUrlRef.current || storageUrlRef.current
-      if (!url) {
+      const rawUrl = blobUrlRef.current || storageUrlRef.current
+      if (!rawUrl) {
         console.warn('[Pitch] Aucune URL disponible — transposition impossible')
         return
       }
+      // Blob URL = fichier local → pas de CORS → fetch direct
+      // Firebase Storage URL → CORS bloqué sur iOS et Android depuis Vercel → proxy
+      const fetchUrl = blobUrlRef.current
+        ? rawUrl
+        : `/api/audio-proxy?url=${encodeURIComponent(rawUrl)}`
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
-      console.log(`[Pitch] Décodage AudioBuffer (${isIOS ? 'iOS Safari' : 'Android/Desktop'}) depuis: ${url.slice(0, 80)}...`)
+      console.log(
+        `[Pitch] Décodage AudioBuffer (${isIOS ? 'iOS Safari' : 'Android/Desktop'}) —`,
+        blobUrlRef.current ? 'blob local (direct)' : 'Firebase → proxy Vercel',
+        `— ${fetchUrl.slice(0, 80)}...`
+      )
       try {
-        const resp = await fetch(url)
+        const resp = await fetch(fetchUrl)
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const arrayBuf = await resp.arrayBuffer()
         const rawCtx   = Tone.getContext().rawContext
