@@ -3,6 +3,7 @@ import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
+import SetPlaybackModal from '../components/SetPlaybackModal'
 import { noteStrToFreq, playPupitre, startHoldNote } from '../lib/sampleSynth'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
@@ -40,6 +41,7 @@ export default function Concert() {
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
   const [showCueText, setShowCueText] = useState(false)
+  const [playbackSetId, setPlaybackSetId] = useState(null)
   const customBg = useBgImage('bg_concert')
 
   const speakHint = (text) => {
@@ -274,11 +276,18 @@ export default function Concert() {
             Tous
           </button>
           {sets.map((set) => (
-            <button key={set.id} onClick={() => selectSet(activeSetId === set.id ? null : set.id)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                activeSetId === set.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
-              {set.name}
-            </button>
+            <div key={set.id} className="flex-shrink-0 flex items-center gap-1">
+              <button onClick={() => selectSet(activeSetId === set.id ? null : set.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  activeSetId === set.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
+                {set.name}
+              </button>
+              <button
+                onClick={() => setPlaybackSetId(set.id)}
+                className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 text-xs flex items-center justify-center"
+                title="Lecture enchaînée"
+              >▶</button>
+            </div>
           ))}
           <button onClick={() => updateSettings({ modeScene: !settings.modeScene })}
             className={`flex-shrink-0 ml-auto px-3 py-1.5 rounded-lg text-xs transition-colors ${
@@ -328,7 +337,7 @@ export default function Concert() {
         </div>
       )}
 
-      {/* Modals */}
+      {/* Modals AudioPlayer + Paroles */}
       {playerState?.isOpen && (
         <Suspense fallback={null}>
           <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} onClose={closePlayer} />
@@ -339,7 +348,20 @@ export default function Concert() {
           <Paroles songId={lyricsState.songId} initialPdfId={lyricsState.pdfId} onClose={closeLyrics} />
         </Suspense>
       )}
-      </div>
+      </div>{/* fin relative z-10 */}
+
+    {/* SetPlaybackModal — en dehors du div z-10 pour que z-[150] soit global */}
+    {playbackSetId && (() => {
+      const set = sets.find((s) => s.id === playbackSetId)
+      return set ? (
+        <SetPlaybackModal
+          set={set}
+          songs={songs}
+          userPupitre={settings.pupitre}
+          onClose={() => setPlaybackSetId(null)}
+        />
+      ) : null
+    })()}
     </div>
   )
 }
