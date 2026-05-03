@@ -16,15 +16,24 @@ const PUPITRE_COLORS = { B: '#185FA5', A: '#534AB7', S: '#D85A30', T: '#3B6D11' 
 const ALL_PUPITRES   = Object.keys(PUPITRE_COLORS)   // ['B','A','S','T']
 const GAP_SECONDS = 5
 
-// Un bouton est "Tutti" s'il couvre toutes les voix ou n'a aucune restriction
+// Un bouton est "instrumental" s'il n'est associé à aucun pupitre vocal (GUIT, Piano…)
+// Ces boutons sont toujours combinables avec n'importe quelle voix.
+function isInstrumental(btn) {
+  return Array.isArray(btn.pupitres) && btn.pupitres.length === 0
+}
+
+// Un bouton est "Tutti" s'il couvre toutes les voix vocales
+// (les instruments avec pupitres:[] NE sont PAS des Tutti)
 function isTutti(btn) {
+  if (isInstrumental(btn)) return false
   return !btn.pupitres?.length || btn.pupitres.length >= ALL_PUPITRES.length
 }
 
 // Deux boutons sont "compléments vocaux" si leurs pupitres sont disjoints ET
 // leur union couvre exactement les 4 voix — ex: ['S'] et ['B','A','T']
 function areVocalComplements(btnA, btnB) {
-  if (isTutti(btnA) || isTutti(btnB)) return false   // géré séparément
+  if (isInstrumental(btnA) || isInstrumental(btnB)) return false  // instruments jamais exclus
+  if (isTutti(btnA) || isTutti(btnB)) return false
   const a = new Set(btnA.pupitres || [])
   const b = new Set(btnB.pupitres || [])
   if ([...a].some((v) => b.has(v))) return false      // chevauchement → pas compléments
@@ -80,14 +89,22 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
       if (!btn) return { ...m, [songId]: [...current, btnId] }
 
       let next
-      if (isTutti(btn)) {
-        // Tutti → garder uniquement ce bouton
-        next = [btnId]
+      if (isInstrumental(btn)) {
+        // Instrument → toujours ajouté, sans toucher à la sélection vocale
+        next = [...current, btnId]
+      } else if (isTutti(btn)) {
+        // Tutti → remplace toutes les voix vocales mais garde les instruments
+        const instruments = current.filter((id) => {
+          const existing = allBtns.find((b) => b.id === id)
+          return existing && isInstrumental(existing)
+        })
+        next = [...instruments, btnId]
       } else {
-        // Retirer Tutti et tout complément vocal contradictoire
+        // Voix vocale → retire Tutti et compléments contradictoires, garde les instruments
         next = current.filter((id) => {
           const existing = allBtns.find((b) => b.id === id)
           if (!existing) return true
+          if (isInstrumental(existing)) return true          // instrument → toujours conservé
           if (isTutti(existing)) return false
           if (areVocalComplements(btn, existing)) return false
           return true

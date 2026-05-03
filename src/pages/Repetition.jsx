@@ -106,14 +106,24 @@ export default function Repetition() {
   // Retourne un tableau de boutons pour la lecture multi-pistes :
   // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
   // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
+  // - Les pistes instrumentales (pupitres:[]) sont toujours ajoutées en plus des voix
   const findBestButtons = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return []
+
+    // Pistes instrumentales disponibles (pupitres vide)
+    const instrumentalBtns = activeSong.audioButtons.filter(
+      (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+    )
+
     const monoButtons = selected.map((p) =>
       activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
     )
-    if (monoButtons.every(Boolean)) return monoButtons   // multi-pistes
+    if (monoButtons.every(Boolean)) {
+      // Multi-pistes vocales + instruments
+      return [...monoButtons, ...instrumentalBtns]
+    }
     const best = findBestButton(selected)
-    return best ? [best] : []
+    return best ? [best, ...instrumentalBtns] : []
   }
 
   const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
