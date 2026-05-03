@@ -1,10 +1,11 @@
-import { lazy, Suspense, useState, useRef } from 'react'
+import { lazy, Suspense, useState, useRef, useEffect } from 'react'
 import useStore from '../store/index'
 import useBgImage from '../hooks/useBgImage'
 import Metronome from '../components/Metronome'
 import ErrorBoundary from '../components/ErrorBoundary'
 import SetPlaybackModal from '../components/SetPlaybackModal'
 import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
+import { getAvailableVoices } from '../lib/voiceHelpers'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -35,7 +36,7 @@ export default function Concert() {
     (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
 
-  const [voiceFilter, setVoiceFilter] = useState(['B', 'A', 'S', 'T'])
+  const [voiceFilter, setVoiceFilter] = useState([])
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
@@ -64,10 +65,11 @@ export default function Concert() {
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
-  const PUPITRE_ORDER = ['B', 'A', 'S', 'T']
-  const availablePupitres = currentSong?.audioButtons?.length
-    ? PUPITRE_ORDER.filter((p) => (currentSong.audioButtons).some((b) => b.pupitres?.length > 0 ? b.pupitres.includes(p) : true))
-    : []
+  const availablePupitres = getAvailableVoices(currentSong)
+
+  useEffect(() => {
+    setVoiceFilter(getAvailableVoices(currentSong))
+  }, [currentSong?.id])
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>
     prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
@@ -122,8 +124,9 @@ export default function Concert() {
   const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
 
   const goToSong = (idx) => {
-    setActiveSongIdx(Math.max(0, Math.min(setSongs.length - 1, idx)))
-    setVoiceFilter(availablePupitres.length > 0 ? availablePupitres : ['B', 'A', 'S', 'T'])
+    const clampedIdx = Math.max(0, Math.min(setSongs.length - 1, idx))
+    setActiveSongIdx(clampedIdx)
+    setVoiceFilter(getAvailableVoices(setSongs[clampedIdx] || null))
   }
 
   const selectSet = (id) => {
@@ -203,14 +206,14 @@ export default function Concert() {
         {currentSong && availablePupitres.length > 0 && (
           <div className="mt-4 flex items-center gap-2 flex-wrap justify-center w-full">
             {availablePupitres.map((p) => {
-              const cfg = PUPITRES_CONFIG.find((c) => c.p === p)
-              if (!cfg) return null
+              const cfg = PUPITRES_CONFIG.find((c) => c.p === p) || { color: p === '5' ? '#7C3AED' : '#888888' }
               const checked = voiceFilter.includes(p)
+              const pillLabel = p === settings.pupitre ? '★' : (currentSong?.buttonLabels?.[p] || p)
               return (
                 <button key={p} onClick={() => toggleVoice(p)}
-                  className={`w-10 h-10 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'bg-transparent opacity-40'}`}
+                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'bg-transparent opacity-40'}`}
                   style={checked ? { backgroundColor: cfg.color } : { color: cfg.color, borderColor: cfg.color }}>
-                  {p === settings.pupitre ? '★' : p}
+                  {pillLabel}
                 </button>
               )
             })}
@@ -221,7 +224,7 @@ export default function Concert() {
             {bestBtns.length > 0 && voiceFilter.length > 0 && (
               <button onClick={() => openPlayer(currentSong.id, bestBtns.map((b) => b.id))}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full">
-                ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.join('+')}</span>
+                ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}</span>
               </button>
             )}
           </div>

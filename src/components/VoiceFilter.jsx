@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { PUPITRES, PUPITRE_COLORS } from '../store/index'
+import { PUPITRE_COLORS } from '../store/index'
+import { getAvailableVoices } from '../lib/voiceHelpers'
 
 // Trouve le meilleur fichier audio pour une sélection de pupitres
 export function findBestAudioButton(audioButtons, selectedPupitres) {
@@ -27,22 +28,16 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
   return best || audioButtons.find((b) => !b.pupitres?.length) || null
 }
 
-const PUPITRE_ORDER = ['B', 'A', 'S', 'T']
-
 export default function VoiceFilter({ song, onPlay, myPupitre }) {
-  const available = new Set(
-    (song?.audioButtons || []).flatMap((b) => b.pupitres?.length > 0 ? b.pupitres : ['B', 'A', 'S', 'T'])
-  )
+  const availableList = getAvailableVoices(song)
 
   // Par défaut : toutes les voix disponibles cochées sauf la mienne
-  const defaultChecked = PUPITRES.filter(
-    (p) => available.has(p) && p !== myPupitre
-  )
+  const defaultChecked = availableList.filter((p) => p !== myPupitre)
   const [selected, setSelected] = useState(defaultChecked)
 
   // Recalcule quand le chant change
   useEffect(() => {
-    setSelected(PUPITRES.filter((p) => available.has(p) && p !== myPupitre))
+    setSelected(getAvailableVoices(song).filter((p) => p !== myPupitre))
   }, [song?.id, myPupitre])
 
   if (!song?.audioButtons?.length) return null
@@ -52,30 +47,31 @@ export default function VoiceFilter({ song, onPlay, myPupitre }) {
   )
 
   const bestBtn = findBestAudioButton(song.audioButtons, selected)
-  const availableList = PUPITRE_ORDER.filter((p) => available.has(p))
 
   // Label lisible de la sélection : "B + S" ou "Tous" ou "Aucun"
   const selectionLabel = selected.length === 0
     ? 'Aucune voix'
     : selected.length === availableList.length
       ? 'Toutes les voix'
-      : selected.join(' + ')
+      : selected.map((p) => song?.buttonLabels?.[p] || p).join(' + ')
 
   return (
     <div className="mt-3 px-1">
       <div className="flex items-center gap-2 flex-wrap">
         {availableList.map((p) => {
+          const color = PUPITRE_COLORS[p] || (p === '5' ? '#7C3AED' : '#888888')
           const checked = selected.includes(p)
+          const pillLabel = p === myPupitre ? '★' : (song?.buttonLabels?.[p] || p)
           return (
             <button
               key={p}
               onClick={() => toggle(p)}
-              className={`w-10 h-10 rounded-xl font-bold text-sm transition-all border-2 ${
+              className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm transition-all border-2 ${
                 checked ? 'text-white border-transparent' : 'bg-transparent border-current opacity-40'
               }`}
-              style={checked ? { backgroundColor: PUPITRE_COLORS[p] } : { color: PUPITRE_COLORS[p] }}
+              style={checked ? { backgroundColor: color } : { color, borderColor: color }}
             >
-              {p === myPupitre ? '★' : p}
+              {pillLabel}
             </button>
           )
         })}
