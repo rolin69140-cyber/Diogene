@@ -7,10 +7,12 @@
  * - Popup si aucune piste disponible pour un morceau
  * - Contrôles : play/pause, suivant, boucle
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { getAudioFile } from '../store/index'
 import useStore from '../store/index'
 import { detectOnset } from '../lib/detectOnset'
+
+const Paroles = lazy(() => import('./Paroles'))
 
 const PUPITRE_COLORS = { B: '#185FA5', A: '#534AB7', S: '#D85A30', T: '#3B6D11' }
 const ALL_PUPITRES   = Object.keys(PUPITRE_COLORS)   // ['B','A','S','T']
@@ -122,6 +124,9 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   }
 
   const [screen, setScreen] = useState('config') // 'config' | 'playing'
+
+  // ── PDF / Paroles ─────────────────────────────────────────────────────────
+  const [pdfOpen, setPdfOpen] = useState(null) // null | { songId, pdfId }
 
   // ── Lecture ───────────────────────────────────────────────────────────────
   const [currentIdx, setCurrentIdx]     = useState(0)
@@ -503,6 +508,36 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
           </div>
         )}
 
+        {/* Boutons PDF / Paroles */}
+        {currentSong && (() => {
+          const pdfs = currentSong.pdfFiles?.length > 0
+            ? currentSong.pdfFiles
+            : (currentSong.lyricsFileId ? [{ id: currentSong.lyricsFileId, label: 'Paroles' }] : [])
+          const hasTextOnly = !!(currentSong.lyricsText && pdfs.length === 0)
+          if (pdfs.length === 0 && !hasTextOnly) return null
+          return (
+            <div className="flex gap-2 flex-wrap justify-center mb-5">
+              {pdfs.map((pdf) => (
+                <button
+                  key={pdf.id}
+                  onClick={() => setPdfOpen({ songId: currentSong.id, pdfId: pdf.id })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-800 text-gray-200 active:bg-gray-700 transition-colors border border-gray-700"
+                >
+                  📄 {pdf.label}
+                </button>
+              ))}
+              {hasTextOnly && (
+                <button
+                  onClick={() => setPdfOpen({ songId: currentSong.id, pdfId: null })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-800 text-gray-200 active:bg-gray-700 transition-colors border border-gray-700"
+                >
+                  📄 Paroles
+                </button>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Barre de progression */}
         <div className="w-full max-w-sm mb-2">
           <div
@@ -599,6 +634,17 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
           )
         })}
       </div>
+
+      {/* Paroles / PDF */}
+      {pdfOpen && (
+        <Suspense fallback={null}>
+          <Paroles
+            songId={pdfOpen.songId}
+            initialPdfId={pdfOpen.pdfId}
+            onClose={() => setPdfOpen(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Popup morceau sans piste */}
       {noTrackSong && (
