@@ -467,8 +467,17 @@ export default function useAudioPlayer() {
       bufStartOffsetRef.current  = getBufferPosition()
       bufStartCtxTimeRef.current = Tone.getContext().rawContext.currentTime
       bufSourceRef.current.playbackRate.value = newSpeed
+      // Compenser la dérive de hauteur introduite par playbackRate ≠ 1
+      // playbackRate=1.2 monte de log2(1.2)×12 ≈ +3.16 st → PitchShift corrige en sens inverse
+      if (pitchShiftRef.current) {
+        pitchShiftRef.current.pitch = transposeRef.current - Math.log2(newSpeed) * 12
+      }
       console.log(`[Pitch] changeSpeed(${newSpeed}) en mode buffer — position resync ✓`)
     } else if (audioRef.current) {
+      // preservesPitch garantit tempo ≠ hauteur sur HTMLAudioElement (Chrome + Safari)
+      audioRef.current.preservesPitch       = true
+      audioRef.current.mozPreservesPitch    = true
+      audioRef.current.webkitPreservesPitch = true
       audioRef.current.playbackRate = newSpeed
     }
   }, [getBufferPosition])
@@ -527,18 +536,21 @@ export default function useAudioPlayer() {
     console.log(`[Pitch] Tone.start() — ctxState: ${Tone.getContext().rawContext.state}`)
 
     // Créer ou mettre à jour le nœud PitchShift
+    // Pitch effectif = transpose demandé − dérive de hauteur due à playbackRate
+    // log2(speed)×12 demi-tons compense exactement la hausse/baisse introduite par playbackRate
+    const effectivePitch = semitones - Math.log2(speedRef.current) * 12
     if (!pitchShiftRef.current) {
       pitchShiftRef.current = new Tone.PitchShift({
-        pitch:      semitones,
+        pitch:      effectivePitch,
         windowSize: 0.1,
         delayTime:  0,
         feedback:   0,
       })
       pitchShiftRef.current.toDestination()
-      console.log(`[Pitch] Tone.PitchShift créé — pitch: ${semitones} demi-ton(s) ✓`)
+      console.log(`[Pitch] Tone.PitchShift créé — pitch: ${effectivePitch.toFixed(2)} demi-ton(s) ✓`)
     } else {
-      pitchShiftRef.current.pitch = semitones
-      console.log(`[Pitch] Tone.PitchShift mis à jour — pitch: ${semitones} demi-ton(s) ✓`)
+      pitchShiftRef.current.pitch = effectivePitch
+      console.log(`[Pitch] Tone.PitchShift mis à jour — pitch: ${effectivePitch.toFixed(2)} demi-ton(s) ✓`)
     }
 
     // Décoder l'AudioBuffer si nécessaire (nouveau fichier ou 1re transposition)

@@ -5,7 +5,7 @@ import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
 import { detectOnset } from '../lib/detectOnset'
 
-const SPEEDS = [1, 0.85, 0.75]
+const SPEEDS = [0.75, 0.85, 1, 1.1, 1.2]
 const TRANSPOSES = [
   { label: '−1T', value: -2 },
   { label: '−½T', value: -1 },
@@ -586,7 +586,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
           <input
             type="range"
             min="0.75"
-            max="1"
+            max="1.2"
             step="0.01"
             value={player.speed}
             onChange={(e) => handleChangeSpeed(parseFloat(e.target.value))}
