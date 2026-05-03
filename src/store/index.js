@@ -524,8 +524,14 @@ const useStore = create(
       setActiveSong: (id) => set({ activeSongId: id }),
 
       // ── Lecteur audio en cours ─────────────────────────────────────────────
-      playerState: null, // { songId, buttonId, isOpen }
-      openPlayer: (songId, buttonId) => set({ playerState: { songId, buttonId, isOpen: true } }),
+      // openPlayer accepte :
+      //   - openPlayer(songId, 'buttonId')         → mono-piste (rétrocompat)
+      //   - openPlayer(songId, ['id1','id2',...])  → multi-pistes
+      playerState: null, // { songId, buttonId, buttonIds, isOpen }
+      openPlayer: (songId, buttonIdOrIds) => {
+        const buttonIds = Array.isArray(buttonIdOrIds) ? buttonIdOrIds : [buttonIdOrIds]
+        set({ playerState: { songId, buttonId: buttonIds[0], buttonIds, isOpen: true } })
+      },
       closePlayer: () => set({ playerState: null }),
 
       // ── Paroles en cours ───────────────────────────────────────────────────

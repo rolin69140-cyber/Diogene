@@ -103,7 +103,21 @@ export default function Repetition() {
     return best || activeSong.audioButtons.find((b) => !b.pupitres?.length) || null
   }
 
-  const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  // Retourne un tableau de boutons pour la lecture multi-pistes :
+  // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
+  // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
+  const findBestButtons = (selected) => {
+    if (!activeSong?.audioButtons?.length || !selected.length) return []
+    const monoButtons = selected.map((p) =>
+      activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
+    )
+    if (monoButtons.every(Boolean)) return monoButtons   // multi-pistes
+    const best = findBestButton(selected)
+    return best ? [best] : []
+  }
+
+  const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
 
   return (
     <div className="relative flex flex-col flex-1 min-h-0 w-full overflow-hidden">
@@ -194,9 +208,9 @@ export default function Repetition() {
               className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
               {voiceFilter.length === availablePupitres.length ? 'Aucun' : 'Tous'}
             </button>
-            {bestBtn && voiceFilter.length > 0 && (
+            {bestBtns.length > 0 && voiceFilter.length > 0 && (
               <button
-                onClick={() => openPlayer(activeSong.id, bestBtn.id)}
+                onClick={() => openPlayer(activeSong.id, bestBtns.map((b) => b.id))}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full"
               >
                 ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.join('+')}</span>

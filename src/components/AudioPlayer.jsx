@@ -3,6 +3,7 @@ import useStore, { getAudioFile } from '../store/index'
 import useAudioPlayer from '../hooks/useAudioPlayer'
 import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
+import { detectOnset } from '../lib/detectOnset'
 
 const SPEEDS = [1, 0.85, 0.75]
 const TRANSPOSES = [
@@ -20,7 +21,7 @@ function formatTime(s) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-export default function AudioPlayer({ songId, buttonId, onClose }) {
+export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp, onClose }) {
   const songs = useStore((s) => s.songs)
   const activeConcertSetId = useStore((s) => s.activeConcertSetId)
   const sets = useStore((s) => s.sets)
@@ -28,9 +29,17 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
   const removeMarker = useStore((s) => s.removeMarker)
   const settings = useStore((s) => s.settings)
   const openLyrics = useStore((s) => s.openLyrics)
+  const setSyncOffset = useStore((s) => s.setSyncOffset)
+
+  // buttonIds : tableau — rétrocompat avec l'ancien prop buttonId (string)
+  const buttonIds = buttonIdsProp ?? (buttonId ? [buttonId] : [])
+  const primaryButtonId = buttonIds[0]
 
   const song = songs.find((s) => s.id === songId)
-  const button = song?.audioButtons?.find((b) => b.id === buttonId)
+  const button = song?.audioButtons?.find((b) => b.id === primaryButtonId)
+  const extraButtons = buttonIds.slice(1)
+    .map((id) => song?.audioButtons?.find((b) => b.id === id))
+    .filter(Boolean)
   const activeSet = sets.find((s) => s.id === activeConcertSetId)
   const markers = activeSet?.markers?.[songId] || []
 
@@ -48,6 +57,177 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
 
   // Ref stable vers startDrag (évite de ré-attacher les listeners DOM à chaque render)
   const startDragRef = useRef(null)
+
+  // ── Multi-pistes (secondaires) ────────────────────────────────────────────
+  const secondaryAudiosRef  = useRef([])   // HTMLAudioElement[] — pistes supplémentaires
+  const blobUrlsSecRef      = useRef([])   // blob URLs secondaires à révoquer
+  const relativeOffsetsRef  = useRef([])   // nombre[] : onset secondaire[i] − onset primaire
+  const primaryOnsetRef     = useRef(0)    // onset normalisé de la piste primaire
+  const multiTrackRef       = useRef(false)// vrai si plusieurs pistes chargées
+  const currentTimeRef      = useRef(0)    // miroir ref de player.currentTime (pour interval)
+
+  useEffect(() => { currentTimeRef.current = player.currentTime }, [player.currentTime])
+
+  // Chargement et sync des pistes secondaires
+  useEffect(() => {
+    // Cleanup toujours effectué en premier
+    secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
+    secondaryAudiosRef.current = []
+    blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
+    blobUrlsSecRef.current = []
+    relativeOffsetsRef.current = []
+    primaryOnsetRef.current = 0
+    multiTrackRef.current = false
+
+    if (!extraButtons.length || !button || !song) return
+
+    const allButtons = [button, ...extraButtons]
+
+    ;(async () => {
+      // Récupération des ArrayBuffers depuis IndexedDB
+      const allABs = await Promise.all(allButtons.map(async (btn) => {
+        if (!btn?.fileId) return null
+        try {
+          const record = await getAudioFile(btn.fileId)
+          if (record?.data) {
+            return record.data instanceof ArrayBuffer
+              ? record.data
+              : await record.data.arrayBuffer?.()
+          }
+        } catch (_) {}
+        return null
+      }))
+
+      // Détection d'onset — utilise le cache syncOffset si disponible
+      const onsets = await Promise.all(allButtons.map(async (btn, i) => {
+        if (btn.syncOffset !== null && btn.syncOffset !== undefined) {
+          console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
+          return btn.syncOffset
+        }
+        if (!allABs[i]) return 0
+        const onset = await detectOnset(allABs[i])
+        setSyncOffset(song.id, btn.id, onset)
+        return onset
+      }))
+
+      // Normalisation : retrancher le minimum pour aligner sur le premier son
+      const minOnset = Math.min(...onsets)
+      const normalized = onsets.map((o) => o - minOnset)
+      primaryOnsetRef.current = normalized[0]
+      relativeOffsetsRef.current = normalized.slice(1).map((o) => o - normalized[0])
+
+      console.log(
+        '[MultiTrack] Offsets normalisés :',
+        allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', ')
+      )
+
+      // Création des HTMLAudioElement secondaires
+      const audios = await Promise.all(extraButtons.map(async (btn, i) => {
+        const a = new Audio()
+        a.playbackRate = player.speed
+        if (allABs[i + 1]) {
+          const blob = new Blob([allABs[i + 1]], { type: 'audio/mpeg' })
+          const url = URL.createObjectURL(blob)
+          blobUrlsSecRef.current.push(url)
+          a.src = url
+        } else if (btn.storageUrl) {
+          a.src = btn.storageUrl
+        } else {
+          return null
+        }
+        // Positionner à l'offset relatif initial
+        a.currentTime = Math.max(0, relativeOffsetsRef.current[i] || 0)
+        return a
+      }))
+
+      secondaryAudiosRef.current = audios.filter(Boolean)
+      multiTrackRef.current = secondaryAudiosRef.current.length > 0
+
+      // Positionner la piste primaire à son onset si elle est à 0
+      if (multiTrackRef.current && primaryOnsetRef.current > 0 && player.currentTime < 0.1) {
+        player.seek(primaryOnsetRef.current)
+      }
+    })()
+
+    return () => {
+      secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
+      blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
+    }
+  }, [buttonIds.join(','), song?.id]) // eslint-disable-line
+
+  // Re-sync secondaires quand paused + currentTime change (seek utilisateur)
+  useEffect(() => {
+    if (player.isPlaying || !multiTrackRef.current) return
+    const t = player.currentTime
+    secondaryAudiosRef.current.forEach((a, i) => {
+      const target = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
+      if (Math.abs(a.currentTime - target) > 0.05) a.currentTime = target
+    })
+  }, [player.currentTime, player.isPlaying])
+
+  // Correction de dérive toutes les 2 s pendant la lecture
+  useEffect(() => {
+    if (!player.isPlaying || !multiTrackRef.current) return
+    const id = setInterval(() => {
+      const t = currentTimeRef.current
+      secondaryAudiosRef.current.forEach((a, i) => {
+        const expected = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
+        const drift = Math.abs(a.currentTime - expected)
+        if (drift > 0.15) {
+          a.currentTime = expected
+          console.log(`[MultiTrack] Re-sync secondaire ${i}: dérive ${(drift * 1000).toFixed(0)}ms`)
+        }
+      })
+    }, 2000)
+    return () => clearInterval(id)
+  }, [player.isPlaying])
+
+  // Nettoyage global au démontage
+  useEffect(() => {
+    return () => {
+      secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
+      blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
+    }
+  }, [])
+
+  // ── Wrappers play/pause/seek/reset/speed (synchronisent les secondaires) ───
+  const handlePlayPause = useCallback(() => {
+    if (!multiTrackRef.current) {
+      player.isPlaying ? player.pause() : player.play()
+      return
+    }
+    if (player.isPlaying) {
+      player.pause()
+      secondaryAudiosRef.current.forEach((a) => a.pause())
+    } else {
+      const t = player.currentTime
+      const isAtStart = t <= (player.segmentStart || 0) + 0.1
+      const startPos = isAtStart ? primaryOnsetRef.current : t
+      player.play(startPos)
+      secondaryAudiosRef.current.forEach((a, i) => {
+        a.currentTime = Math.max(0, startPos + (relativeOffsetsRef.current[i] || 0))
+        a.playbackRate = player.speed
+        a.play().catch(() => {})
+      })
+    }
+  }, [player])
+
+  const handleReset = useCallback(() => {
+    if (multiTrackRef.current) {
+      const resetPos = Math.max(player.segmentStart, primaryOnsetRef.current)
+      player.seek(resetPos)
+      secondaryAudiosRef.current.forEach((a, i) => {
+        a.currentTime = Math.max(0, resetPos + (relativeOffsetsRef.current[i] || 0))
+      })
+    } else {
+      player.resetToSegmentStart()
+    }
+  }, [player])
+
+  const handleChangeSpeed = useCallback((newSpeed) => {
+    player.changeSpeed(newSpeed)
+    secondaryAudiosRef.current.forEach((a) => { a.playbackRate = newSpeed })
+  }, [player])
 
   // Dessiner la waveform
   useEffect(() => {
@@ -132,6 +312,12 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
       const t = xToTime(x)
       if (isDraggingRef.current === 'seek') {
         player.seek(t)
+        // Sync secondaires pendant le seek (multi-pistes)
+        if (multiTrackRef.current) {
+          secondaryAudiosRef.current.forEach((a, i) => {
+            a.currentTime = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
+          })
+        }
       } else if (isDraggingRef.current === 'segStart') {
         const newStart = Math.min(t, (player.segmentEnd ?? player.duration) - 0.5)
         console.log(`[Curseur] segStart → ${newStart.toFixed(2)}s`)
@@ -268,7 +454,12 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="font-bold text-lg leading-tight">{song.name}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{button.label} — {formatTime(player.duration)}</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {extraButtons.length > 0
+                ? [button, ...extraButtons].map((b) => b.label).join(' + ')
+                : button.label
+              } — {formatTime(player.duration)}
+            </p>
           </div>
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none ml-4 mt-0.5">×</button>
         </div>
@@ -359,11 +550,11 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
         {/* Contrôles principaux */}
         <div className="flex items-center gap-3 justify-center mb-4">
           <button
-            onClick={player.resetToSegmentStart}
+            onClick={handleReset}
             className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl"
           >⏮</button>
           <button
-            onClick={() => player.isPlaying ? player.pause() : player.play()}
+            onClick={handlePlayPause}
             className="w-16 h-16 rounded-full bg-blue-600 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95 transition-transform"
           >
             {player.isPlaying ? '⏸' : '▶'}
@@ -386,7 +577,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             {SPEEDS.map((s) => (
               <button
                 key={s}
-                onClick={() => player.changeSpeed(s)}
+                onClick={() => handleChangeSpeed(s)}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors
                   ${player.speed === s ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}
               >× {s}</button>
@@ -398,7 +589,7 @@ export default function AudioPlayer({ songId, buttonId, onClose }) {
             max="1"
             step="0.01"
             value={player.speed}
-            onChange={(e) => player.changeSpeed(parseFloat(e.target.value))}
+            onChange={(e) => handleChangeSpeed(parseFloat(e.target.value))}
             className="w-full accent-blue-600 h-2 cursor-pointer"
           />
         </div>
