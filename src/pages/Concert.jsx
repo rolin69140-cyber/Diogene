@@ -97,7 +97,29 @@ export default function Concert() {
     return best || exactAny || null
   }
 
-  const bestBtn = findBestButton(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  // Retourne un tableau de boutons pour la lecture multi-pistes :
+  // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
+  // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
+  // - Les pistes instrumentales (pupitres:[]) sont toujours ajoutées en plus des voix
+  const findBestButtons = (selected) => {
+    if (!currentSong?.audioButtons?.length || !selected.length) return []
+
+    const instrumentalBtns = currentSong.audioButtons.filter(
+      (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+    )
+
+    const monoButtons = selected.map((p) =>
+      currentSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
+    )
+    if (monoButtons.every(Boolean)) {
+      return [...monoButtons, ...instrumentalBtns]
+    }
+    const best = findBestButton(selected)
+    return best ? [best, ...instrumentalBtns] : []
+  }
+
+  const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
 
   const goToSong = (idx) => {
     setActiveSongIdx(Math.max(0, Math.min(setSongs.length - 1, idx)))
@@ -196,8 +218,8 @@ export default function Concert() {
               className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
               {voiceFilter.length === availablePupitres.length ? 'Aucun' : 'Tous'}
             </button>
-            {bestBtn && voiceFilter.length > 0 && (
-              <button onClick={() => openPlayer(currentSong.id, bestBtn.id)}
+            {bestBtns.length > 0 && voiceFilter.length > 0 && (
+              <button onClick={() => openPlayer(currentSong.id, bestBtns.map((b) => b.id))}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full">
                 ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.join('+')}</span>
               </button>
@@ -301,7 +323,7 @@ export default function Concert() {
       {/* Modals AudioPlayer + Paroles */}
       {playerState?.isOpen && (
         <Suspense fallback={null}>
-          <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} onClose={closePlayer} />
+          <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} buttonIds={playerState.buttonIds} onClose={closePlayer} />
         </Suspense>
       )}
       {lyricsState?.isOpen && (

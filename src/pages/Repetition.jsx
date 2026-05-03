@@ -367,7 +367,7 @@ export default function Repetition() {
           Ici, elles sont dans le div racine sans z-index → leur z-50 est global. */}
       {playerState?.isOpen && (
         <Suspense fallback={null}>
-          <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} onClose={closePlayer} />
+          <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} buttonIds={playerState.buttonIds} onClose={closePlayer} />
         </Suspense>
       )}
       {lyricsState?.isOpen && (
