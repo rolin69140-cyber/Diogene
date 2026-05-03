@@ -11,7 +11,24 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { getAudioFile } from '../store/index'
 
 const PUPITRE_COLORS = { B: '#185FA5', A: '#534AB7', S: '#D85A30', T: '#3B6D11' }
+const ALL_PUPITRES   = Object.keys(PUPITRE_COLORS)   // ['B','A','S','T']
 const GAP_SECONDS = 5
+
+// Un bouton est "Tutti" s'il couvre toutes les voix ou n'a aucune restriction
+function isTutti(btn) {
+  return !btn.pupitres?.length || btn.pupitres.length >= ALL_PUPITRES.length
+}
+
+// Deux boutons sont "compléments vocaux" si leurs pupitres sont disjoints ET
+// leur union couvre exactement les 4 voix — ex: ['S'] et ['B','A','T']
+function areVocalComplements(btnA, btnB) {
+  if (isTutti(btnA) || isTutti(btnB)) return false   // géré séparément
+  const a = new Set(btnA.pupitres || [])
+  const b = new Set(btnB.pupitres || [])
+  if ([...a].some((v) => b.has(v))) return false      // chevauchement → pas compléments
+  const combined = new Set([...a, ...b])
+  return ALL_PUPITRES.every((p) => combined.has(p))
+}
 
 // Trouve la meilleure piste pour un morceau selon un pupitre
 function bestButtonForPupitre(song, pupitre) {
@@ -43,13 +60,38 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     return map
   })
 
-  // Toggle une piste pour un chant (case à cocher)
-  const toggleTrack = (songId, btnId) => {
+  // Toggle une piste avec exclusions cohérentes :
+  //   • Tutti sélectionné → désélectionne tout le reste
+  //   • Autre sélectionné → désélectionne Tutti + compléments vocaux contradictoires
+  const toggleTrack = (songId, btnId, song) => {
     setTrackMap((m) => {
-      const current = m[songId] || []
-      const next = current.includes(btnId)
-        ? current.filter((id) => id !== btnId)
-        : [...current, btnId]
+      const current  = m[songId] || []
+
+      // Déselection simple
+      if (current.includes(btnId)) {
+        return { ...m, [songId]: current.filter((id) => id !== btnId) }
+      }
+
+      const allBtns = song?.audioButtons || []
+      const btn     = allBtns.find((b) => b.id === btnId)
+      if (!btn) return { ...m, [songId]: [...current, btnId] }
+
+      let next
+      if (isTutti(btn)) {
+        // Tutti → garder uniquement ce bouton
+        next = [btnId]
+      } else {
+        // Retirer Tutti et tout complément vocal contradictoire
+        next = current.filter((id) => {
+          const existing = allBtns.find((b) => b.id === id)
+          if (!existing) return true
+          if (isTutti(existing)) return false
+          if (areVocalComplements(btn, existing)) return false
+          return true
+        })
+        next = [...next, btnId]
+      }
+
       return { ...m, [songId]: next }
     })
   }
@@ -320,7 +362,7 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
                       return (
                         <button
                           key={btn.id}
-                          onClick={() => toggleTrack(song.id, btn.id)}
+                          onClick={() => toggleTrack(song.id, btn.id, song)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
                             isSelected ? 'text-white' : 'bg-transparent opacity-50'
                           }`}
