@@ -418,6 +418,18 @@ const useStore = create(
         return { songs: newSongs }
       }),
 
+      // Stocke l'offset d'onset détecté pour un bouton audio (local uniquement — cache technique)
+      // Pas de sync Firebase : recalculé si absent, inutile de le propager.
+      setSyncOffset: (songId, buttonId, offset) => set((s) => ({
+        songs: s.songs.map((song) =>
+          song.id === songId
+            ? { ...song, audioButtons: (song.audioButtons || []).map((b) =>
+                b.id === buttonId ? { ...b, syncOffset: offset } : b
+              )}
+            : song
+        )
+      })),
+
       addPdfToSong: (songId, pdf) => set((s) => ({
         songs: s.songs.map((song) =>
           song.id === songId

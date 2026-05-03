@@ -9,6 +9,8 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getAudioFile } from '../store/index'
+import useStore from '../store/index'
+import { detectOnset } from '../lib/detectOnset'
 
 const PUPITRE_COLORS = { B: '#185FA5', A: '#534AB7', S: '#D85A30', T: '#3B6D11' }
 const ALL_PUPITRES   = Object.keys(PUPITRE_COLORS)   // ['B','A','S','T']
@@ -47,6 +49,7 @@ function btnColor(btn) {
 }
 
 export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
+  const setSyncOffset = useStore((s) => s.setSyncOffset)
   const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
 
   // ── Sélection multi-pistes ────────────────────────────────────────────────
@@ -157,40 +160,73 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     }
 
     // ── Chargement de toutes les sources sélectionnées ────────────────────
-    const srcs = await Promise.all(selectedBtns.map(async (btn) => {
-      if (btn.storageUrl) return btn.storageUrl
+    // Pour chaque bouton : résoudre l'URL + récupérer l'ArrayBuffer si dispo localement
+    const loaded = await Promise.all(selectedBtns.map(async (btn) => {
       if (btn.fileId) {
         try {
           const record = await getAudioFile(btn.fileId)
           if (record?.data) {
-            const url = URL.createObjectURL(new Blob([record.data], { type: record.type || 'audio/mpeg' }))
+            const ab  = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
+            const url = URL.createObjectURL(new Blob([ab], { type: record.type || 'audio/mpeg' }))
             blobUrlsRef.current.push(url)
-            return url
+            return { btn, url, arrayBuffer: ab }
           }
         } catch (e) { console.warn('[SetPlayback] getAudioFile:', e) }
       }
+      if (btn.storageUrl) return { btn, url: btn.storageUrl, arrayBuffer: null }
       return null
     }))
 
-    const validSrcs = srcs.filter(Boolean)
-    if (validSrcs.length === 0) {
+    const validLoaded = loaded.filter(Boolean)
+    if (validLoaded.length === 0) {
       setNoTrackSong(song.name)
       setIsPlaying(false)
       playingRef.current = false
       return
     }
 
+    // ── Détection d'onset (uniquement si plusieurs pistes) ────────────────
+    // Calcule les offsets de synchronisation pour aligner les voix sur le
+    // même point de départ musical (ex: premier son de guitare).
+    // Mise en cache dans btn.syncOffset pour éviter de recalculer.
+    let syncOffsets = validLoaded.map((l) => l.btn.syncOffset ?? null)
+
+    if (validLoaded.length > 1) {
+      // Calculer les offsets manquants pour les pistes locales (ArrayBuffer dispo)
+      syncOffsets = await Promise.all(validLoaded.map(async (l, i) => {
+        if (syncOffsets[i] !== null) return syncOffsets[i]  // déjà en cache
+        if (!l.arrayBuffer) return 0                         // URL distante sans AB → 0
+        console.log(`[SetPlayback] Calcul onset pour "${l.btn.label}"…`)
+        const offset = await detectOnset(l.arrayBuffer)
+        // Mise en cache dans le store (local uniquement)
+        setSyncOffset(song.id, l.btn.id, offset)
+        return offset
+      }))
+
+      // Normalisation : retrancher le minimum pour que la piste la plus courte
+      // en silence démarre à currentTime=0, les autres sont avancées.
+      const minOffset = Math.min(...syncOffsets)
+      syncOffsets = syncOffsets.map((o) => o - minOffset)
+      console.log(
+        '[SetPlayback] Offsets de sync normalisés :',
+        validLoaded.map((l, i) => `${l.btn.label}=${syncOffsets[i].toFixed(3)}s`).join(', ')
+      )
+    } else {
+      // Une seule piste → pas de sync nécessaire
+      syncOffsets = [0]
+    }
+
     // ── Piste primaire ────────────────────────────────────────────────────
     const primary = audioRef.current
     if (!primary) return
-    primary.src          = validSrcs[0]
-    primary.currentTime  = 0
+    primary.src         = validLoaded[0].url
+    primary.currentTime = syncOffsets[0]
 
     // ── Pistes secondaires ────────────────────────────────────────────────
-    secondaryAudiosRef.current = validSrcs.slice(1).map((src) => {
+    secondaryAudiosRef.current = validLoaded.slice(1).map((l, i) => {
       const a = new Audio()
-      a.src         = src
-      a.currentTime = 0
+      a.src         = l.url
+      a.currentTime = syncOffsets[i + 1]
       return a
     })
 
@@ -209,7 +245,7 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     } catch (e) {
       console.warn('[SetPlayback] play error:', e)
     }
-  }, [setSongs, trackMap]) // eslint-disable-line
+  }, [setSongs, trackMap, setSyncOffset]) // eslint-disable-line
 
   // Quand la piste primaire se termine → gap 5 s → suivant (ou boucle)
   const handleEnded = useCallback(() => {
