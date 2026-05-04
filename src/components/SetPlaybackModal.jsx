@@ -358,6 +358,22 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     playSongAtIndex(next)
   }
 
+  const handlePrev = () => {
+    clearGap()
+    // Si > 3 s dans le morceau → revenir au début du morceau en cours
+    const pos = audioRef.current?.currentTime ?? 0
+    if (pos > 3) {
+      if (audioRef.current) audioRef.current.currentTime = 0
+      secondaryAudiosRef.current.forEach((a) => { a.currentTime = 0 })
+      return
+    }
+    // Sinon → morceau précédent (sans boucle sur le premier)
+    audioRef.current?.pause()
+    secondaryAudiosRef.current.forEach((a) => a.pause())
+    const prev = Math.max(0, idxRef.current - 1)
+    playSongAtIndex(prev)
+  }
+
   const handleStart = () => {
     setScreen('playing')
     setCurrentIdx(0)
@@ -583,7 +599,13 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
         )}
 
         {/* Contrôles */}
-        <div className="flex items-center gap-8 mt-4">
+        <div className="flex items-center gap-6 mt-4">
+          <button
+            onClick={handlePrev}
+            className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-xl active:scale-95 transition-transform"
+          >
+            ⏮
+          </button>
           <button
             onClick={handlePlayPause}
             className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-2xl active:scale-95 transition-transform"
