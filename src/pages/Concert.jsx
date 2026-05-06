@@ -37,7 +37,7 @@ export default function Concert() {
   )
 
   const [voiceFilter, setVoiceFilter] = useState([])
-  const [withInstrumental, setWithInstrumental] = useState(true)
+  const [withInstrumental, setWithInstrumental] = useState(false)
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
@@ -70,7 +70,7 @@ export default function Concert() {
 
   useEffect(() => {
     setVoiceFilter(getAvailableVoices(currentSong))
-    setWithInstrumental(true)
+    setWithInstrumental(false)
   }, [currentSong?.id])
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>

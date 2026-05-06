@@ -74,11 +74,11 @@ export default function Repetition() {
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   const availablePupitres = getAvailableVoices(activeSong)
   const [voiceFilter, setVoiceFilter] = useState(availablePupitres)
-  const [withInstrumental, setWithInstrumental] = useState(true)
+  const [withInstrumental, setWithInstrumental] = useState(false)
 
   useEffect(() => {
     setVoiceFilter(getAvailableVoices(activeSong))
-    setWithInstrumental(true)
+    setWithInstrumental(false)
   }, [activeSong?.id])
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>
