@@ -430,6 +430,21 @@ const useStore = create(
         )
       })),
 
+      // Stocke le marqueur de synchronisation manuel (en secondes) — persiste en Firebase.
+      // Prioritaire sur syncOffset (détection automatique) au moment du playback.
+      setSyncMarker: (songId, buttonId, marker) => set((s) => {
+        const newSongs = s.songs.map((song) =>
+          song.id === songId
+            ? { ...song, audioButtons: (song.audioButtons || []).map((b) =>
+                b.id === buttonId ? { ...b, syncMarker: marker } : b
+              )}
+            : song
+        )
+        const updated = newSongs.find((song) => song.id === songId)
+        if (updated) fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] setSyncMarker sync:', e))
+        return { songs: newSongs }
+      }),
+
       addPdfToSong: (songId, pdf) => set((s) => ({
         songs: s.songs.map((song) =>
           song.id === songId

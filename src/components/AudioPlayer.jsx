@@ -82,9 +82,6 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
     if (!extraButtons.length || !button || !song) return
 
     const allButtons = [button, ...extraButtons]
-    const isInstrumentalBtn = (btn) => Array.isArray(btn?.pupitres) && btn.pupitres.length === 0
-    const instIdx = allButtons.findIndex(isInstrumentalBtn)
-    const hasInstrumental = instIdx !== -1
 
     ;(async () => {
       // Récupération des ArrayBuffers depuis IndexedDB
@@ -101,31 +98,39 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
         return null
       }))
 
-      // Détection d'onset uniquement si la sélection contient une piste instrumentale.
-      // Sans instrumental → tous les offsets à 0 (départ simultané, pas de détection).
+      // ── Calcul des onsets (multi-pistes uniquement) ───────────────────────
+      // Priorité : syncMarker (saisi manuellement) > syncOffset (cache auto) > detectOnset
+      // Sans multi-pistes → offsets à 0, aucun calcul.
       let normalized
 
-      if (hasInstrumental) {
+      if (allButtons.length > 1) {
         const onsets = await Promise.all(allButtons.map(async (btn, i) => {
-          if (btn.syncOffset !== null && btn.syncOffset !== undefined) {
+          // 1. Marqueur manuel (prioritaire, fiable)
+          if (btn.syncMarker != null) {
+            console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
+            return btn.syncMarker
+          }
+          // 2. Cache auto (onset détecté lors d'une session précédente)
+          if (btn.syncOffset != null) {
             console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
             return btn.syncOffset
           }
+          // 3. Détection RMS (fallback)
           if (!allABs[i]) return 0
           const onset = await detectOnset(allABs[i])
           setSyncOffset(song.id, btn.id, onset)
           return onset
         }))
 
-        // Alignement sur l'onset de la piste instrumentale
-        const instOnset = onsets[instIdx]
-        normalized = onsets.map((o) => Math.max(0, o - instOnset))
+        // Normalisation sur le minimum → piste la plus en avance = offset 0
+        const minOnset = Math.min(...onsets)
+        normalized = onsets.map((o) => Math.max(0, o - minOnset))
         console.log(
-          '[MultiTrack] Offsets normalisés (référence instrumentale) :',
+          '[MultiTrack] Offsets normalisés :',
           allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', ')
         )
       } else {
-        normalized = allButtons.map(() => 0)
+        normalized = [0]
       }
 
       primaryOnsetRef.current = normalized[0]
