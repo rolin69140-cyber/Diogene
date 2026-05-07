@@ -241,26 +241,41 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     // ── Piste primaire ────────────────────────────────────────────────────
     const primary = audioRef.current
     if (!primary) return
-    primary.src         = validLoaded[0].url
-    primary.currentTime = syncOffsets[0]
+    primary.src = validLoaded[0].url
 
     // ── Pistes secondaires ────────────────────────────────────────────────
-    secondaryAudiosRef.current = validLoaded.slice(1).map((l, i) => {
+    const secondaryElements = validLoaded.slice(1).map((l) => {
       const a = new Audio()
-      a.src         = l.url
-      a.currentTime = syncOffsets[i + 1]
+      a.src = l.url
       return a
     })
+    secondaryAudiosRef.current = secondaryElements
 
     setElapsed(0)
     setDuration(0)
     setCurrentIdx(idx)
     idxRef.current = idx
 
+    // Attendre que tous les éléments soient prêts avant d'appliquer currentTime
+    // Android Chrome ignore currentTime assigné avant canplay (contrairement à iOS)
+    const waitCanPlay = (audio) => new Promise((resolve) => {
+      if (audio.readyState >= 2) { resolve(); return }
+      const onReady = () => { audio.removeEventListener('canplay', onReady); resolve() }
+      audio.addEventListener('canplay', onReady)
+      // Timeout de sécurité 3s pour ne pas bloquer si l'audio ne charge pas
+      setTimeout(resolve, 3000)
+    })
+
+    await Promise.all([primary, ...secondaryElements].map(waitCanPlay))
+
+    // Appliquer les offsets de sync une fois les éléments chargés
+    primary.currentTime = syncOffsets[0]
+    secondaryElements.forEach((a, i) => { a.currentTime = syncOffsets[i + 1] })
+
     try {
       await Promise.all([
         primary.play(),
-        ...secondaryAudiosRef.current.map((a) => a.play()),
+        ...secondaryElements.map((a) => a.play()),
       ])
       setIsPlaying(true)
       playingRef.current = true
