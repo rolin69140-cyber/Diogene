@@ -74,11 +74,9 @@ export default function Repetition() {
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   const availablePupitres = getAvailableVoices(activeSong)
   const [voiceFilter, setVoiceFilter] = useState(availablePupitres)
-  const [withInstrumental, setWithInstrumental] = useState(false)
 
   useEffect(() => {
     setVoiceFilter(getAvailableVoices(activeSong))
-    setWithInstrumental(false)
   }, [activeSong?.id])
 
   const toggleVoice = (p) => setVoiceFilter((prev) =>
@@ -106,29 +104,27 @@ export default function Repetition() {
     return best || activeSong.audioButtons.find((b) => !b.pupitres?.length) || null
   }
 
-  // Pistes instrumentales disponibles pour le chant actif
-  const instrumentalBtns = (activeSong?.audioButtons || []).filter(
-    (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
-  )
-  const hasInstrumental = instrumentalBtns.length > 0
-
   // Retourne un tableau de boutons pour la lecture multi-pistes :
   // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
   // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
-  // - Les pistes instrumentales sont ajoutées uniquement si withInstrumental=true
+  // - Les pistes instrumentales (pupitres:[]) sont toujours ajoutées en plus des voix
   const findBestButtons = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return []
 
-    const instBtns = withInstrumental ? instrumentalBtns : []
+    // Pistes instrumentales disponibles (pupitres vide)
+    const instrumentalBtns = activeSong.audioButtons.filter(
+      (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+    )
 
     const monoButtons = selected.map((p) =>
       activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
     )
     if (monoButtons.every(Boolean)) {
-      return [...monoButtons, ...instBtns]
+      // Multi-pistes vocales + instruments
+      return [...monoButtons, ...instrumentalBtns]
     }
     const best = findBestButton(selected)
-    return best ? [best, ...instBtns] : []
+    return best ? [best, ...instrumentalBtns] : []
   }
 
   const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
@@ -219,15 +215,6 @@ export default function Repetition() {
                 </button>
               )
             })}
-            {hasInstrumental && (
-              <button
-                onClick={() => setWithInstrumental((v) => !v)}
-                className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${withInstrumental ? 'text-white border-transparent' : 'bg-transparent opacity-40'}`}
-                style={withInstrumental ? { backgroundColor: '#B45309' } : { color: '#B45309', borderColor: '#B45309' }}
-              >
-                {instrumentalBtns[0]?.label || '♪'}
-              </button>
-            )}
             <button onClick={() => setVoiceFilter(voiceFilter.length === availablePupitres.length ? [] : availablePupitres)}
               className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
               {voiceFilter.length === availablePupitres.length ? 'Aucun' : 'Tous'}
