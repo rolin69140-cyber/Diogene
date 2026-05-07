@@ -82,6 +82,9 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
     if (!extraButtons.length || !button || !song) return
 
     const allButtons = [button, ...extraButtons]
+    const isInstrumentalBtn = (btn) => Array.isArray(btn?.pupitres) && btn.pupitres.length === 0
+    const instIdx = allButtons.findIndex(isInstrumentalBtn)
+    const hasInstrumental = instIdx !== -1
 
     ;(async () => {
       // Récupération des ArrayBuffers depuis IndexedDB
@@ -98,28 +101,35 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
         return null
       }))
 
-      // Détection d'onset — utilise le cache syncOffset si disponible
-      const onsets = await Promise.all(allButtons.map(async (btn, i) => {
-        if (btn.syncOffset !== null && btn.syncOffset !== undefined) {
-          console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
-          return btn.syncOffset
-        }
-        if (!allABs[i]) return 0
-        const onset = await detectOnset(allABs[i])
-        setSyncOffset(song.id, btn.id, onset)
-        return onset
-      }))
+      // Détection d'onset uniquement si la sélection contient une piste instrumentale.
+      // Sans instrumental → tous les offsets à 0 (départ simultané, pas de détection).
+      let normalized
 
-      // Normalisation : retrancher le minimum pour aligner sur le premier son
-      const minOnset = Math.min(...onsets)
-      const normalized = onsets.map((o) => o - minOnset)
+      if (hasInstrumental) {
+        const onsets = await Promise.all(allButtons.map(async (btn, i) => {
+          if (btn.syncOffset !== null && btn.syncOffset !== undefined) {
+            console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
+            return btn.syncOffset
+          }
+          if (!allABs[i]) return 0
+          const onset = await detectOnset(allABs[i])
+          setSyncOffset(song.id, btn.id, onset)
+          return onset
+        }))
+
+        // Alignement sur l'onset de la piste instrumentale
+        const instOnset = onsets[instIdx]
+        normalized = onsets.map((o) => Math.max(0, o - instOnset))
+        console.log(
+          '[MultiTrack] Offsets normalisés (référence instrumentale) :',
+          allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', ')
+        )
+      } else {
+        normalized = allButtons.map(() => 0)
+      }
+
       primaryOnsetRef.current = normalized[0]
       relativeOffsetsRef.current = normalized.slice(1).map((o) => o - normalized[0])
-
-      console.log(
-        '[MultiTrack] Offsets normalisés :',
-        allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', ')
-      )
 
       // Création des HTMLAudioElement secondaires
       const audios = await Promise.all(extraButtons.map(async (btn, i) => {
@@ -135,7 +145,6 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
         } else {
           return null
         }
-        // Positionner à l'offset relatif initial
         a.currentTime = Math.max(0, relativeOffsetsRef.current[i] || 0)
         return a
       }))

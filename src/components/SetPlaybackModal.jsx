@@ -207,35 +207,41 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
       return
     }
 
-    // ── Détection d'onset (uniquement si plusieurs pistes) ────────────────
-    // Calcule les offsets de synchronisation pour aligner les voix sur le
-    // même point de départ musical (ex: premier son de guitare).
-    // Mise en cache dans btn.syncOffset pour éviter de recalculer.
-    let syncOffsets = validLoaded.map((l) => l.btn.syncOffset ?? null)
+    // ── Détection d'onset ────────────────────────────────────────────────────
+    // Uniquement si la sélection contient une piste instrumentale (GUIT, Piano…).
+    // La piste instrumentale sert de référence : son onset = t=0.
+    // Chaque autre piste est avancée de (son onset − onset instrumental).
+    // Sans instrumental → pas de détection, toutes les pistes démarrent à 0.
+    const instIdx = validLoaded.findIndex((l) => isInstrumental(l.btn))
+    const hasInstrumental = instIdx !== -1
+    let syncOffsets
 
-    if (validLoaded.length > 1) {
-      // Calculer les offsets manquants pour les pistes locales (ArrayBuffer dispo)
-      syncOffsets = await Promise.all(validLoaded.map(async (l, i) => {
-        if (syncOffsets[i] !== null) return syncOffsets[i]  // déjà en cache
-        if (!l.arrayBuffer) return 0                         // URL distante sans AB → 0
+    if (validLoaded.length > 1 && hasInstrumental) {
+      // Détection des onsets (avec cache)
+      let rawOnsets = await Promise.all(validLoaded.map(async (l) => {
+        if (l.btn.syncOffset !== null && l.btn.syncOffset !== undefined) {
+          console.log(`[SetPlayback] Onset en cache "${l.btn.label}": ${l.btn.syncOffset.toFixed(3)}s`)
+          return l.btn.syncOffset
+        }
+        if (!l.arrayBuffer) return 0   // URL distante sans AB → 0
         console.log(`[SetPlayback] Calcul onset pour "${l.btn.label}"…`)
         const offset = await detectOnset(l.arrayBuffer)
-        // Mise en cache dans le store (local uniquement)
         setSyncOffset(song.id, l.btn.id, offset)
         return offset
       }))
 
-      // Normalisation : retrancher le minimum pour que la piste la plus courte
-      // en silence démarre à currentTime=0, les autres sont avancées.
-      const minOffset = Math.min(...syncOffsets)
-      syncOffsets = syncOffsets.map((o) => o - minOffset)
+      // Alignement sur l'onset instrumental : offset[i] = onset[i] − onset_instrumental
+      // Les pistes avec plus de silence que l'instrumental sautent leur silence excédentaire.
+      // Les pistes avec moins de silence (impossibles en pratique) sont clampées à 0.
+      const instOnset = rawOnsets[instIdx]
+      syncOffsets = rawOnsets.map((o) => Math.max(0, o - instOnset))
       console.log(
-        '[SetPlayback] Offsets de sync normalisés :',
+        '[SetPlayback] Offsets normalisés (référence instrumentale) :',
         validLoaded.map((l, i) => `${l.btn.label}=${syncOffsets[i].toFixed(3)}s`).join(', ')
       )
     } else {
-      // Une seule piste → pas de sync nécessaire
-      syncOffsets = [0]
+      // Pas d'instrumental ou piste unique → pas de détection, départ simultané à 0
+      syncOffsets = validLoaded.map(() => 0)
     }
 
     // ── Piste primaire ────────────────────────────────────────────────────
