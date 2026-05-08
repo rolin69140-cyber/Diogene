@@ -137,15 +137,6 @@ export default function Repetition() {
     (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
   ) || []
 
-  if (activeSong) {
-    console.log('[DEBUG BUTTONS] audioButtons de', activeSong.name, ':',
-      activeSong.audioButtons?.map((b) => ({ label: b.label, pupitres: JSON.stringify(b.pupitres) }))
-    )
-    console.log('[DEBUG BUTTONS] availablePupitres:', availablePupitres)
-    console.log('[DEBUG BUTTONS] instrumentalBtns:', instrumentalBtns.map((b) => b.label))
-    console.log('[DEBUG BUTTONS] voiceFilter:', voiceFilter)
-  }
-
   const selectedInst = instBtnId ? instrumentalBtns.find((b) => b.id === instBtnId) ?? null : null
   const bestBtns = selectedInst
     ? [selectedInst]
@@ -258,12 +249,7 @@ export default function Repetition() {
             )}
             {bestBtns.length > 0 && (voiceFilter.length > 0 || instBtnId) && (
               <button
-                onClick={() => {
-                  console.log('[DEBUG openPlayer] voiceFilter:', voiceFilter)
-                  console.log('[DEBUG openPlayer] instBtnId:', instBtnId)
-                  console.log('[DEBUG openPlayer] bestBtns:', bestBtns.map((b) => ({ id: b.id, label: b.label, pupitres: b.pupitres })))
-                  openPlayer(activeSong.id, bestBtns.map((b) => b.id))
-                }}
+                onClick={() => openPlayer(activeSong.id, bestBtns.map((b) => b.id))}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full"
               >
                 ▶ <span className="text-xs opacity-90 truncate">
