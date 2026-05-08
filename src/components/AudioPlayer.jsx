@@ -137,6 +137,22 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
       relativeOffsetsRef.current = normalized.slice(1).map((o) => o - normalized[0])
 
       // Création des HTMLAudioElement secondaires
+      // waitCanPlay : attend readyState >= 2 ou erreur (max 4s)
+      // → garantit que currentTime est applicable, et filtre les pistes qui échouent (ex. CORS iOS)
+      const waitCanPlay = (a) => new Promise((resolve) => {
+        if (a.readyState >= 2) { resolve(true); return }
+        const cleanup = (ok) => {
+          a.removeEventListener('canplay', onOk)
+          a.removeEventListener('error',   onErr)
+          resolve(ok)
+        }
+        const onOk  = () => cleanup(true)
+        const onErr = () => cleanup(false)
+        a.addEventListener('canplay', onOk)
+        a.addEventListener('error',   onErr)
+        setTimeout(() => cleanup(a.readyState >= 2), 4000)
+      })
+
       const audios = await Promise.all(extraButtons.map(async (btn, i) => {
         const a = new Audio()
         a.playbackRate = player.speed
@@ -148,6 +164,13 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
         } else if (btn.storageUrl) {
           a.src = btn.storageUrl
         } else {
+          return null
+        }
+        // Attendre que l'audio soit prêt avant de l'utiliser
+        const ok = await waitCanPlay(a)
+        if (!ok) {
+          console.warn(`[MultiTrack] "${btn.label}" — échec chargement, piste ignorée`)
+          a.src = ''
           return null
         }
         a.currentTime = Math.max(0, relativeOffsetsRef.current[i] || 0)
@@ -180,16 +203,31 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
   }, [player.currentTime, player.isPlaying])
 
   // Correction de dérive toutes les 2 s pendant la lecture
+  // Si après 2 tentatives la dérive persiste (iOS ne peut pas setter currentTime en cours de lecture),
+  // on abandonne pour cette piste pour éviter la boucle infinie de logs.
+  const resyncFailCountRef = useRef([])
   useEffect(() => {
     if (!player.isPlaying || !multiTrackRef.current) return
+    resyncFailCountRef.current = secondaryAudiosRef.current.map(() => 0)
     const id = setInterval(() => {
       const t = currentTimeRef.current
       secondaryAudiosRef.current.forEach((a, i) => {
+        if ((resyncFailCountRef.current[i] || 0) >= 3) return // abandon après 3 échecs
         const expected = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
         const drift = Math.abs(a.currentTime - expected)
         if (drift > 0.15) {
+          const before = a.currentTime
           a.currentTime = expected
+          // Vérifier si le seek a été pris en compte (iOS bloque parfois currentTime pendant lecture)
+          setTimeout(() => {
+            if (Math.abs(a.currentTime - expected) > 0.15) {
+              resyncFailCountRef.current[i] = (resyncFailCountRef.current[i] || 0) + 1
+              console.warn(`[MultiTrack] Re-sync ${i} ignoré par iOS (${resyncFailCountRef.current[i]}/3)`)
+            }
+          }, 100)
           console.log(`[MultiTrack] Re-sync secondaire ${i}: dérive ${(drift * 1000).toFixed(0)}ms`)
+        } else {
+          resyncFailCountRef.current[i] = 0 // dérive ok → reset compteur
         }
       })
     }, 2000)

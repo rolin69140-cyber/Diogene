@@ -690,7 +690,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                       <span className="text-gray-400 truncate flex-1">{btn.fileName}</span>
                       {/* Marqueur de sync manuel */}
                       <button
-                        onClick={() => {
+                        onClick={() => withPin(() => {
                           const current = btn.syncMarker != null ? String(btn.syncMarker) : ''
                           const input = prompt(
                             `Marqueur de sync pour "${btn.label}" (secondes)\nEx: 1.4 = première note à 1.4s\nLaisser vide pour supprimer`,
@@ -699,7 +699,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                           if (input === null) return // annulé
                           const val = parseFloat(input.trim())
                           setSyncMarker(song.id, btn.id, input.trim() === '' ? null : isNaN(val) ? null : val)
-                        }}
+                        })}
                         className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
                           btn.syncMarker != null
                             ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700'

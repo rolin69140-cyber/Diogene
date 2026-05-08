@@ -74,14 +74,28 @@ export default function Repetition() {
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   const availablePupitres = getAvailableVoices(activeSong)
   const [voiceFilter, setVoiceFilter] = useState(availablePupitres)
+  const [instBtnId, setInstBtnId] = useState(null)
 
   useEffect(() => {
     setVoiceFilter(getAvailableVoices(activeSong))
+    setInstBtnId(null)
   }, [activeSong?.id])
 
-  const toggleVoice = (p) => setVoiceFilter((prev) =>
-    prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-  )
+  const toggleVoice = (p) => {
+    setInstBtnId(null)
+    setVoiceFilter((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    )
+  }
+
+  const toggleInst = (btnId) => {
+    if (instBtnId === btnId) {
+      setInstBtnId(null)
+    } else {
+      setInstBtnId(btnId)
+      setVoiceFilter([])
+    }
+  }
 
   const findBestButton = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return null
@@ -100,34 +114,42 @@ export default function Repetition() {
       const score = overlap * 10 - (btn.pupitres.length - overlap)
       if (score > bestScore) { bestScore = score; best = btn }
     }
-    // 3. Bouton sans pupitres en dernier recours
-    return best || activeSong.audioButtons.find((b) => !b.pupitres?.length) || null
+    // 3. Bouton non-typé (pupitres undefined) en dernier recours — exclut les instrumentaux (pupitres:[])
+    return best || activeSong.audioButtons.find((b) => !Array.isArray(b.pupitres)) || null
   }
 
-  // Retourne un tableau de boutons pour la lecture multi-pistes :
-  // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
-  // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
-  // - Les pistes instrumentales (pupitres:[]) sont toujours ajoutées en plus des voix
+  // Retourne un tableau de boutons pour la lecture multi-pistes (voix uniquement).
+  // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return []
-
-    // Pistes instrumentales disponibles (pupitres vide)
-    const instrumentalBtns = activeSong.audioButtons.filter(
-      (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
-    )
-
     const monoButtons = selected.map((p) =>
       activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
     )
     if (monoButtons.every(Boolean)) {
-      // Multi-pistes vocales + instruments
-      return [...monoButtons, ...instrumentalBtns]
+      return monoButtons
     }
     const best = findBestButton(selected)
-    return best ? [best, ...instrumentalBtns] : []
+    return best ? [best] : []
   }
 
-  const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  // Pistes instrumentales disponibles (mutuellement exclusives avec les voix)
+  const instrumentalBtns = activeSong?.audioButtons?.filter(
+    (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+  ) || []
+
+  if (activeSong) {
+    console.log('[DEBUG BUTTONS] audioButtons de', activeSong.name, ':',
+      activeSong.audioButtons?.map((b) => ({ label: b.label, pupitres: JSON.stringify(b.pupitres) }))
+    )
+    console.log('[DEBUG BUTTONS] availablePupitres:', availablePupitres)
+    console.log('[DEBUG BUTTONS] instrumentalBtns:', instrumentalBtns.map((b) => b.label))
+    console.log('[DEBUG BUTTONS] voiceFilter:', voiceFilter)
+  }
+
+  const selectedInst = instBtnId ? instrumentalBtns.find((b) => b.id === instBtnId) ?? null : null
+  const bestBtns = selectedInst
+    ? [selectedInst]
+    : findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
   const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
 
   return (
@@ -197,8 +219,8 @@ export default function Repetition() {
           })}
         </div>
 
-        {/* Filtre voix + bouton lecture */}
-        {activeSong && availablePupitres.length > 0 && (
+        {/* Filtre voix + instrument + bouton lecture */}
+        {activeSong && (availablePupitres.length > 0 || instrumentalBtns.length > 0) && (
           <div className="mt-4 flex items-center gap-2 flex-wrap justify-center w-full">
             {availablePupitres.map((p) => {
               const cfg = PUPITRES_CONFIG.find((c) => c.p === p) || { color: p === '5' ? '#7C3AED' : '#888888' }
@@ -215,16 +237,40 @@ export default function Repetition() {
                 </button>
               )
             })}
-            <button onClick={() => setVoiceFilter(voiceFilter.length === availablePupitres.length ? [] : availablePupitres)}
-              className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
-              {voiceFilter.length === availablePupitres.length ? 'Aucun' : 'Tous'}
-            </button>
-            {bestBtns.length > 0 && voiceFilter.length > 0 && (
+            {instrumentalBtns.map((btn) => {
+              const checked = instBtnId === btn.id
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => toggleInst(btn.id)}
+                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent bg-gray-600' : 'bg-transparent opacity-40 text-gray-500 border-gray-400'}`}
+                >
+                  {btn.label}
+                </button>
+              )
+            })}
+            {availablePupitres.length > 0 && (
               <button
-                onClick={() => openPlayer(activeSong.id, bestBtns.map((b) => b.id))}
+                onClick={() => { setInstBtnId(null); setVoiceFilter(voiceFilter.length === availablePupitres.length && !instBtnId ? [] : availablePupitres) }}
+                className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
+                {voiceFilter.length === availablePupitres.length && !instBtnId ? 'Aucun' : 'Tous'}
+              </button>
+            )}
+            {bestBtns.length > 0 && (voiceFilter.length > 0 || instBtnId) && (
+              <button
+                onClick={() => {
+                  console.log('[DEBUG openPlayer] voiceFilter:', voiceFilter)
+                  console.log('[DEBUG openPlayer] instBtnId:', instBtnId)
+                  console.log('[DEBUG openPlayer] bestBtns:', bestBtns.map((b) => ({ id: b.id, label: b.label, pupitres: b.pupitres })))
+                  openPlayer(activeSong.id, bestBtns.map((b) => b.id))
+                }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full"
               >
-                ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.map((p) => activeSong?.buttonLabels?.[p] || p).join('+')}</span>
+                ▶ <span className="text-xs opacity-90 truncate">
+                  {instBtnId
+                    ? (selectedInst?.label || 'Instrument')
+                    : voiceFilter.map((p) => activeSong?.buttonLabels?.[p] || p).join('+')}
+                </span>
               </button>
             )}
           </div>

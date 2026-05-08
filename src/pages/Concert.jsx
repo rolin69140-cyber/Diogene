@@ -37,6 +37,7 @@ export default function Concert() {
   )
 
   const [voiceFilter, setVoiceFilter] = useState([])
+  const [instBtnId, setInstBtnId] = useState(null)
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
@@ -69,11 +70,24 @@ export default function Concert() {
 
   useEffect(() => {
     setVoiceFilter(getAvailableVoices(currentSong))
+    setInstBtnId(null)
   }, [currentSong?.id])
 
-  const toggleVoice = (p) => setVoiceFilter((prev) =>
-    prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-  )
+  const toggleVoice = (p) => {
+    setInstBtnId(null)
+    setVoiceFilter((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    )
+  }
+
+  const toggleInst = (btnId) => {
+    if (instBtnId === btnId) {
+      setInstBtnId(null)
+    } else {
+      setInstBtnId(btnId)
+      setVoiceFilter([])
+    }
+  }
 
   const findBestButton = (selected) => {
     if (!currentSong?.audioButtons?.length || !selected.length) return null
@@ -84,8 +98,8 @@ export default function Concert() {
       (b) => b.pupitres?.length > 0 && b.pupitres.length === sel.size && b.pupitres.every((x) => sel.has(x))
     )
     if (exactExplicit) return exactExplicit
-    // 2. Exact match sans pupitres (bouton non typé — dernier recours)
-    const exactAny = currentSong.audioButtons.find((b) => !b.pupitres?.length)
+    // 2. Bouton non-typé (pupitres undefined) en dernier recours — exclut les instrumentaux (pupitres:[])
+    const exactAny = currentSong.audioButtons.find((b) => !Array.isArray(b.pupitres))
     // 3. Meilleur score sur pupitres explicites
     let best = null, bestScore = -Infinity
     for (const btn of currentSong.audioButtons) {
@@ -99,34 +113,36 @@ export default function Concert() {
     return best || exactAny || null
   }
 
-  // Retourne un tableau de boutons pour la lecture multi-pistes :
-  // - Si chaque pupitre sélectionné a sa propre piste mono-voix exclusive → tableau multi
-  // - Sinon → tableau d'un seul bouton (comportement actuel, pas de régression)
-  // - Les pistes instrumentales (pupitres:[]) sont toujours ajoutées en plus des voix
+  // Retourne un tableau de boutons pour la lecture multi-pistes (voix uniquement).
+  // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!currentSong?.audioButtons?.length || !selected.length) return []
-
-    const instrumentalBtns = currentSong.audioButtons.filter(
-      (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
-    )
-
     const monoButtons = selected.map((p) =>
       currentSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
     )
     if (monoButtons.every(Boolean)) {
-      return [...monoButtons, ...instrumentalBtns]
+      return monoButtons
     }
     const best = findBestButton(selected)
-    return best ? [best, ...instrumentalBtns] : []
+    return best ? [best] : []
   }
 
-  const bestBtns = findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
+  // Pistes instrumentales disponibles (mutuellement exclusives avec les voix)
+  const instrumentalBtns = currentSong?.audioButtons?.filter(
+    (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+  ) || []
+
+  const selectedInst = instBtnId ? instrumentalBtns.find((b) => b.id === instBtnId) ?? null : null
+  const bestBtns = selectedInst
+    ? [selectedInst]
+    : findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
   const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
 
   const goToSong = (idx) => {
     const clampedIdx = Math.max(0, Math.min(setSongs.length - 1, idx))
     setActiveSongIdx(clampedIdx)
     setVoiceFilter(getAvailableVoices(setSongs[clampedIdx] || null))
+    setInstBtnId(null)
   }
 
   const selectSet = (id) => {
@@ -202,8 +218,8 @@ export default function Concert() {
           })}
         </div>
 
-        {/* Filtre voix + bouton lecture */}
-        {currentSong && availablePupitres.length > 0 && (
+        {/* Filtre voix + instrument + bouton lecture */}
+        {currentSong && (availablePupitres.length > 0 || instrumentalBtns.length > 0) && (
           <div className="mt-4 flex items-center gap-2 flex-wrap justify-center w-full">
             {availablePupitres.map((p) => {
               const cfg = PUPITRES_CONFIG.find((c) => c.p === p) || { color: p === '5' ? '#7C3AED' : '#888888' }
@@ -217,14 +233,33 @@ export default function Concert() {
                 </button>
               )
             })}
-            <button onClick={() => setVoiceFilter(voiceFilter.length === availablePupitres.length ? [] : availablePupitres)}
-              className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
-              {voiceFilter.length === availablePupitres.length ? 'Aucun' : 'Tous'}
-            </button>
-            {bestBtns.length > 0 && voiceFilter.length > 0 && (
+            {instrumentalBtns.map((btn) => {
+              const checked = instBtnId === btn.id
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => toggleInst(btn.id)}
+                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent bg-gray-600' : 'bg-transparent opacity-40 text-gray-500 border-gray-400'}`}
+                >
+                  {btn.label}
+                </button>
+              )
+            })}
+            {availablePupitres.length > 0 && (
+              <button
+                onClick={() => { setInstBtnId(null); setVoiceFilter(voiceFilter.length === availablePupitres.length && !instBtnId ? [] : availablePupitres) }}
+                className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
+                {voiceFilter.length === availablePupitres.length && !instBtnId ? 'Aucun' : 'Tous'}
+              </button>
+            )}
+            {bestBtns.length > 0 && (voiceFilter.length > 0 || instBtnId) && (
               <button onClick={() => openPlayer(currentSong.id, bestBtns.map((b) => b.id))}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full">
-                ▶ <span className="text-xs opacity-90 truncate">{voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}</span>
+                ▶ <span className="text-xs opacity-90 truncate">
+                  {instBtnId
+                    ? (selectedInst?.label || 'Instrument')
+                    : voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}
+                </span>
               </button>
             )}
           </div>
