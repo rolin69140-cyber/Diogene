@@ -125,6 +125,8 @@ export default function Concert() {
     if (monoButtons.every(Boolean)) {
       return monoButtons
     }
+    // Voix unique sans piste mono dédiée → pas de lecture (évite de jouer une piste multi-voix)
+    if (selected.length === 1) return []
     const best = findBestButton(selected)
     return best ? [best] : []
   }
