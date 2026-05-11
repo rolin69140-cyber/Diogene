@@ -119,9 +119,18 @@ export default function Concert() {
   // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!currentSong?.audioButtons?.length || !selected.length) return []
-    const monoButtons = selected.map((p) =>
-      currentSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
-    )
+    const monoButtons = selected.map((p) => {
+      // 1. Match exact sur pupitres
+      const exact = currentSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
+      if (exact) return exact
+      // 2. Fallback : le buttonLabels du pupitre correspond au label du bouton
+      //    Ex: buttonLabels['T'] = 'ALTI 2' → cherche un bouton avec label 'ALTI 2'
+      const alias = currentSong.buttonLabels?.[p]
+      if (alias) return currentSong.audioButtons.find((b) =>
+        b.pupitres?.length === 1 && b.label === alias
+      ) || null
+      return null
+    })
     if (monoButtons.every(Boolean)) {
       return monoButtons
     }

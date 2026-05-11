@@ -125,9 +125,18 @@ export default function Repetition() {
   // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return []
-    const monoButtons = selected.map((p) =>
-      activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
-    )
+    const monoButtons = selected.map((p) => {
+      // 1. Match exact sur pupitres
+      const exact = activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
+      if (exact) return exact
+      // 2. Fallback : le buttonLabels du pupitre correspond au label du bouton
+      //    Ex: buttonLabels['T'] = 'ALTI 2' → cherche un bouton avec label 'ALTI 2'
+      const alias = activeSong.buttonLabels?.[p]
+      if (alias) return activeSong.audioButtons.find((b) =>
+        b.pupitres?.length === 1 && b.label === alias
+      ) || null
+      return null
+    })
     if (monoButtons.every(Boolean)) {
       return monoButtons
     }
