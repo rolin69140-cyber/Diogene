@@ -350,10 +350,24 @@ const useStore = create(
         for (const song of s.songs) {
           if (song.notes) localNotesMap[song.id] = song.notes
         }
-        const merged = cloudSongs.map((song) => ({
-          ...song,
-          ...(localNotesMap[song.id] ? { notes: localNotesMap[song.id] } : {}),
-        }))
+        const merged = cloudSongs.map((song) => {
+          // Migration : corriger les pupitres des boutons dont le label est dans LABEL_TO_PUPITRES
+          // mais dont les pupitres actuels ne correspondent pas (ex. "S 2" avec pupitres:['S'] → ['5'])
+          const migratedButtons = (song.audioButtons || []).map((btn) => {
+            if (
+              Object.prototype.hasOwnProperty.call(LABEL_TO_PUPITRES, btn.label) &&
+              JSON.stringify(btn.pupitres) !== JSON.stringify(LABEL_TO_PUPITRES[btn.label])
+            ) {
+              return { ...btn, pupitres: LABEL_TO_PUPITRES[btn.label] }
+            }
+            return btn
+          })
+          return {
+            ...song,
+            audioButtons: migratedButtons,
+            ...(localNotesMap[song.id] ? { notes: localNotesMap[song.id] } : {}),
+          }
+        })
         return { songs: merged }
       }),
       setSetsFromCloud: (sets) => set({ sets }),

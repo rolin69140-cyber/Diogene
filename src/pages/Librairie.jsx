@@ -455,7 +455,8 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
   const [editBpm, setEditBpm] = useState(song.bpm || '')
   const [editNotes, setEditNotes] = useState(() => {
     const init = {}
-    PUPITRES.forEach((p) => { init[p] = parseNotes2(song.attackNotes?.[p]) })
+    const allKeys = [...PUPITRES, ...(song.buttonLabels?.['5'] ? ['5'] : [])]
+    allKeys.forEach((p) => { init[p] = parseNotes2(song.attackNotes?.[p]) })
     return init
   })
   const [editCueText, setEditCueText] = useState(song.cueText || '')
