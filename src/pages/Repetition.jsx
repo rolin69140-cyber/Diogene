@@ -244,8 +244,10 @@ export default function Repetition() {
                 <button
                   key={p}
                   onClick={() => toggleVoice(p)}
-                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'bg-transparent opacity-40'}`}
-                  style={checked ? { backgroundColor: cfg.color } : { color: cfg.color, borderColor: cfg.color }}
+                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'opacity-40'}`}
+                  style={checked
+                    ? { backgroundColor: cfg.color, borderColor: 'transparent' }
+                    : { backgroundColor: 'transparent', color: cfg.color, borderColor: cfg.color }}
                 >
                   {pillLabel}
                 </button>
