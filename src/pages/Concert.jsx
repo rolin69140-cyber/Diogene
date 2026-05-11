@@ -67,11 +67,29 @@ export default function Concert() {
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
   const hiddenPupitres = currentSong?.hiddenPupitres || []
-  const availablePupitres = getAvailableVoices(currentSong).filter((p) => !hiddenPupitres.includes(p))
+  const baseVoicesConcert = getAvailableVoices(currentSong).filter((p) => !hiddenPupitres.includes(p))
+  const aliasVoicesConcert = Object.keys(currentSong?.buttonLabels || {}).filter((p) => {
+    if (hiddenPupitres.includes(p)) return false
+    if (baseVoicesConcert.includes(p)) return false
+    const alias = currentSong.buttonLabels[p]
+    return currentSong?.audioButtons?.some(
+      (b) => b.pupitres !== undefined && b.pupitres.length <= 1 && b.label.toLowerCase() === alias.toLowerCase()
+    )
+  })
+  const availablePupitres = [...baseVoicesConcert, ...aliasVoicesConcert]
 
   useEffect(() => {
     const hidden = currentSong?.hiddenPupitres || []
-    setVoiceFilter(getAvailableVoices(currentSong).filter((p) => !hidden.includes(p)))
+    const base = getAvailableVoices(currentSong).filter((p) => !hidden.includes(p))
+    const alias = Object.keys(currentSong?.buttonLabels || {}).filter((p) => {
+      if (hidden.includes(p)) return false
+      if (base.includes(p)) return false
+      const lbl = currentSong.buttonLabels[p]
+      return currentSong?.audioButtons?.some(
+        (b) => b.pupitres !== undefined && b.pupitres.length <= 1 && b.label.toLowerCase() === lbl.toLowerCase()
+      )
+    })
+    setVoiceFilter([...base, ...alias])
     setInstBtnId(null)
   }, [currentSong?.id])
 

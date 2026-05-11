@@ -74,13 +74,32 @@ export default function Repetition() {
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   // Exclure les pupitres masqués (décochés dans Librairie)
   const hiddenPupitres = activeSong?.hiddenPupitres || []
-  const availablePupitres = getAvailableVoices(activeSong).filter((p) => !hiddenPupitres.includes(p))
+  // Inclut aussi les pupitres de buttonLabels dont le bouton alias existe (pupitres:[])
+  const baseVoices = getAvailableVoices(activeSong).filter((p) => !hiddenPupitres.includes(p))
+  const aliasVoices = Object.keys(activeSong?.buttonLabels || {}).filter((p) => {
+    if (hiddenPupitres.includes(p)) return false
+    if (baseVoices.includes(p)) return false
+    const alias = activeSong.buttonLabels[p]
+    return activeSong?.audioButtons?.some(
+      (b) => b.pupitres !== undefined && b.pupitres.length <= 1 && b.label.toLowerCase() === alias.toLowerCase()
+    )
+  })
+  const availablePupitres = [...baseVoices, ...aliasVoices]
   const [voiceFilter, setVoiceFilter] = useState(availablePupitres)
   const [instBtnId, setInstBtnId] = useState(null)
 
   useEffect(() => {
     const hidden = activeSong?.hiddenPupitres || []
-    setVoiceFilter(getAvailableVoices(activeSong).filter((p) => !hidden.includes(p)))
+    const base = getAvailableVoices(activeSong).filter((p) => !hidden.includes(p))
+    const alias = Object.keys(activeSong?.buttonLabels || {}).filter((p) => {
+      if (hidden.includes(p)) return false
+      if (base.includes(p)) return false
+      const lbl = activeSong.buttonLabels[p]
+      return activeSong?.audioButtons?.some(
+        (b) => b.pupitres !== undefined && b.pupitres.length <= 1 && b.label.toLowerCase() === lbl.toLowerCase()
+      )
+    })
+    setVoiceFilter([...base, ...alias])
     setInstBtnId(null)
   }, [activeSong?.id])
 
