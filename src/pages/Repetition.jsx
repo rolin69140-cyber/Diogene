@@ -9,6 +9,7 @@ import DirectorNotesModal from '../components/DirectorNotesModal'
 import SetPlaybackModal from '../components/SetPlaybackModal'
 import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
+import useDirectorNotes from '../hooks/useDirectorNotes'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -47,6 +48,7 @@ export default function Repetition() {
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
   const [showCueText, setShowCueText] = useState(false)
   const customBg = useBgImage('bg_repetition')
+  const { notes: directorNotesText } = useDirectorNotes(activeSong?.name)
 
   const speakHint = (text) => {
     if (!text || !window.speechSynthesis) return
@@ -306,6 +308,34 @@ export default function Repetition() {
           </div>
         )}
       </div>
+
+      {/* Notes inline (perso + chef de chœur) */}
+      {activeSong && (activeSong.notes?.trim() || directorNotesText?.trim()) && (
+        <div className="px-4 pt-2 pb-1 flex flex-col gap-1.5">
+          {activeSong.notes?.trim() && (
+            <button
+              onClick={() => setNotesSongId(activeSong.id)}
+              className="text-left w-full px-3 py-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 active:opacity-70 transition-opacity"
+            >
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-0.5">✏️ Notes</p>
+              <p className="text-xs text-amber-800 dark:text-amber-200 line-clamp-2 leading-relaxed whitespace-pre-wrap">
+                {activeSong.notes}
+              </p>
+            </button>
+          )}
+          {directorNotesText?.trim() && (
+            <button
+              onClick={() => setDirectorSongId(activeSong.id)}
+              className="text-left w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 active:opacity-70 transition-opacity"
+            >
+              <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-0.5">🎼 Chef de chœur</p>
+              <p className="text-xs text-indigo-800 dark:text-indigo-200 line-clamp-2 leading-relaxed whitespace-pre-wrap">
+                {directorNotesText}
+              </p>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Bouton texte de scène */}
       {activeSong?.cueText && (
