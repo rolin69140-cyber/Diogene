@@ -144,8 +144,14 @@ export default function Concert() {
   }
 
   // Pistes instrumentales disponibles (mutuellement exclusives avec les voix)
+  // Exclus : boutons pupitres:[] dont le label est un alias voix via buttonLabels
+  // (ex. Voix 1 mappé à B via buttonLabels → ce n'est pas un instrument)
+  const voiceAliasLabels = new Set(
+    Object.values(currentSong?.buttonLabels || {}).map((l) => l.toLowerCase())
+  )
   const instrumentalBtns = currentSong?.audioButtons?.filter(
-    (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0
+    (b) => Array.isArray(b.pupitres) && b.pupitres.length === 0 &&
+           !voiceAliasLabels.has(b.label.toLowerCase())
   ) || []
 
   const selectedInst = instBtnId ? instrumentalBtns.find((b) => b.id === instBtnId) ?? null : null
