@@ -29,7 +29,8 @@ export function findBestAudioButton(audioButtons, selectedPupitres) {
 }
 
 export default function VoiceFilter({ song, onPlay, myPupitre }) {
-  const availableList = getAvailableVoices(song)
+  const hiddenPupitres = song?.hiddenPupitres || []
+  const availableList = getAvailableVoices(song).filter((p) => !hiddenPupitres.includes(p))
 
   // Par défaut : toutes les voix disponibles cochées sauf la mienne
   const defaultChecked = availableList.filter((p) => p !== myPupitre)
@@ -37,7 +38,8 @@ export default function VoiceFilter({ song, onPlay, myPupitre }) {
 
   // Recalcule quand le chant change
   useEffect(() => {
-    setSelected(getAvailableVoices(song).filter((p) => p !== myPupitre))
+    const hidden = song?.hiddenPupitres || []
+    setSelected(getAvailableVoices(song).filter((p) => !hidden.includes(p) && p !== myPupitre))
   }, [song?.id, myPupitre])
 
   if (!song?.audioButtons?.length) return null

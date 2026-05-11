@@ -66,10 +66,12 @@ export default function Concert() {
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
-  const availablePupitres = getAvailableVoices(currentSong)
+  const hiddenPupitres = currentSong?.hiddenPupitres || []
+  const availablePupitres = getAvailableVoices(currentSong).filter((p) => !hiddenPupitres.includes(p))
 
   useEffect(() => {
-    setVoiceFilter(getAvailableVoices(currentSong))
+    const hidden = currentSong?.hiddenPupitres || []
+    setVoiceFilter(getAvailableVoices(currentSong).filter((p) => !hidden.includes(p)))
     setInstBtnId(null)
   }, [currentSong?.id])
 

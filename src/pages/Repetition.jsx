@@ -72,12 +72,15 @@ export default function Repetition() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   // Trouver le meilleur fichier audio pour une sélection de pupitres
-  const availablePupitres = getAvailableVoices(activeSong)
+  // Exclure les pupitres masqués (décochés dans Librairie)
+  const hiddenPupitres = activeSong?.hiddenPupitres || []
+  const availablePupitres = getAvailableVoices(activeSong).filter((p) => !hiddenPupitres.includes(p))
   const [voiceFilter, setVoiceFilter] = useState(availablePupitres)
   const [instBtnId, setInstBtnId] = useState(null)
 
   useEffect(() => {
-    setVoiceFilter(getAvailableVoices(activeSong))
+    const hidden = activeSong?.hiddenPupitres || []
+    setVoiceFilter(getAvailableVoices(activeSong).filter((p) => !hidden.includes(p)))
     setInstBtnId(null)
   }, [activeSong?.id])
 
