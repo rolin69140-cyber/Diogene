@@ -221,6 +221,43 @@ export const AUDIO_PREFIXES = [
   { prefix: 'Voice 5',  button: 'V5', pupitres: [] },
 ]
 
+// Table label → pupitres pour ButtonRenamePicker
+// Permet de mettre à jour pupitres quand on renomme un bouton manuellement
+export const LABEL_TO_PUPITRES = {
+  'Tutti':  ['B', 'A', 'S', 'T'],
+  'B':      ['B'],
+  'A':      ['A'],
+  'S':      ['S'],
+  'T':      ['T'],
+  'B 1':    ['B'],
+  'B 2':    ['B'],
+  'A 1':    ['A'],
+  'A 2':    ['A'],
+  'S 1':    ['S'],
+  'S 2':    ['5'],
+  'T 1':    ['T'],
+  'T 2':    ['T'],
+  'Sans B': ['A', 'S', 'T'],
+  'Sans A': ['B', 'S', 'T'],
+  'Sans S': ['B', 'A', 'T'],
+  'Sans T': ['B', 'A', 'S'],
+  'B + T':  ['B', 'T'],
+  'B + A':  ['B', 'A'],
+  'B + S':  ['B', 'S'],
+  'A + S':  ['A', 'S'],
+  'A + T':  ['A', 'T'],
+  'S + T':  ['S', 'T'],
+  // Instruments → pupitres vide
+  'Acc':   [],
+  'Guit':  [],
+  'Piano': [],
+  'Orgue': [],
+  'Clav':  [],
+  'Solo':  [],
+  // Voix numérotées génériques → pas de pupitre SATB
+  'V1': [], 'V2': [], 'V3': [], 'V4': [], 'V5': [],
+}
+
 export function detectAudioPrefix(filename) {
   // Normaliser en NFC + remplacer underscores par espaces
   const base = filename.replace(/\.[^.]+$/, '').replace(/_/g, ' ').normalize('NFC')
@@ -408,9 +445,18 @@ const useStore = create(
       }),
 
       renameAudioButton: (songId, buttonId, newLabel) => set((s) => {
+        // Si le nouveau label est dans la table connue, mettre à jour les pupitres aussi
+        const newPupitres = Object.prototype.hasOwnProperty.call(LABEL_TO_PUPITRES, newLabel)
+          ? LABEL_TO_PUPITRES[newLabel]
+          : undefined
         const newSongs = s.songs.map((song) =>
           song.id === songId
-            ? { ...song, audioButtons: (song.audioButtons || []).map((b) => b.id === buttonId ? { ...b, label: newLabel } : b) }
+            ? { ...song, audioButtons: (song.audioButtons || []).map((b) => {
+                if (b.id !== buttonId) return b
+                const updated = { ...b, label: newLabel }
+                if (newPupitres !== undefined) updated.pupitres = newPupitres
+                return updated
+              })}
             : song
         )
         const updated = newSongs.find((song) => song.id === songId)
