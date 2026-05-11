@@ -347,20 +347,31 @@ const useStore = create(
       // Fusionne les chants du cloud en préservant les notes personnelles locales
       setSongsFromCloud: (cloudSongs) => set((s) => {
         const localNotesMap = {}
+        const localSyncOffsets = {}  // syncOffset est local uniquement → à préserver au sync Firebase
         for (const song of s.songs) {
           if (song.notes) localNotesMap[song.id] = song.notes
+          if (song.audioButtons) {
+            localSyncOffsets[song.id] = {}
+            for (const btn of song.audioButtons) {
+              if (btn.syncOffset != null) localSyncOffsets[song.id][btn.id] = btn.syncOffset
+            }
+          }
         }
         const merged = cloudSongs.map((song) => {
           // Migration : corriger les pupitres des boutons dont le label est dans LABEL_TO_PUPITRES
           // mais dont les pupitres actuels ne correspondent pas (ex. "S 2" avec pupitres:['S'] → ['5'])
+          const syncMap = localSyncOffsets[song.id] || {}
           const migratedButtons = (song.audioButtons || []).map((btn) => {
+            let b = btn
             if (
               Object.prototype.hasOwnProperty.call(LABEL_TO_PUPITRES, btn.label) &&
               JSON.stringify(btn.pupitres) !== JSON.stringify(LABEL_TO_PUPITRES[btn.label])
             ) {
-              return { ...btn, pupitres: LABEL_TO_PUPITRES[btn.label] }
+              b = { ...b, pupitres: LABEL_TO_PUPITRES[btn.label] }
             }
-            return btn
+            // Restaurer le syncOffset local (non stocké dans Firebase)
+            if (syncMap[btn.id] != null) b = { ...b, syncOffset: syncMap[btn.id] }
+            return b
           })
           return {
             ...song,
