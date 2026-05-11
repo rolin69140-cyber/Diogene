@@ -130,11 +130,14 @@ export default function Repetition() {
       const exact = activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
       if (exact) return exact
       // 2. Fallback : le buttonLabels du pupitre correspond au label du bouton
-      //    Ex: buttonLabels['T'] = 'ALTI 2' → cherche un bouton avec label 'ALTI 2'
+      //    Insensible à la casse, accepte aussi pupitres:[] (ex. V1/V2 renommés)
+      //    Ex: buttonLabels['B'] = 'VOIX 1' → cherche un bouton avec label 'Voix 1'
       const alias = activeSong.buttonLabels?.[p]
-      if (alias) return activeSong.audioButtons.find((b) =>
-        b.pupitres?.length === 1 && b.label === alias
-      ) || null
+      if (alias) return activeSong.audioButtons.find((b) => {
+        if (b.pupitres === undefined) return false // bouton non typé (Tutti générique)
+        if (b.pupitres.length > 1) return false   // multi-voix → pas un bouton mono
+        return b.label.toLowerCase() === alias.toLowerCase()
+      }) || null
       return null
     })
     if (monoButtons.every(Boolean)) {
