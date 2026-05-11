@@ -48,7 +48,6 @@ export default function Repetition() {
   const holdStopRef = useRef(null) // stop fonction de la note tenue en cours
   const [showCueText, setShowCueText] = useState(false)
   const customBg = useBgImage('bg_repetition')
-  const { notes: directorNotesText } = useDirectorNotes(activeSong?.name)
 
   const speakHint = (text) => {
     if (!text || !window.speechSynthesis) return
@@ -60,6 +59,7 @@ export default function Repetition() {
   }
 
   const activeSong = songs.find((s) => s.id === activeSongId)
+  const { notes: directorNotesText } = useDirectorNotes(activeSong?.name)
   const buttonSize = settings.buttonSize || 'normal'
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20

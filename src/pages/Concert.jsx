@@ -44,7 +44,6 @@ export default function Concert() {
   const [notesSongId, setNotesSongId]       = useState(null)
   const [directorSongId, setDirectorSongId] = useState(null)
   const holdStopRef = useRef(null)
-  const { notes: directorNotesText } = useDirectorNotes(currentSong?.name)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
   const [showCueText, setShowCueText] = useState(false)
@@ -67,6 +66,7 @@ export default function Concert() {
     : [...songs].sort((a, b) => a.name.localeCompare(b.name))
 
   const currentSong = setSongs[activeSongIdx] || null
+  const { notes: directorNotesText } = useDirectorNotes(currentSong?.name)
 
   const buttonSize = settings.buttonSize || 'normal'
   const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
