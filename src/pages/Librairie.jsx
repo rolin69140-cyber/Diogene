@@ -600,16 +600,36 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                 )})}
 
                 {/* 5e voix */}
-                <div className="flex items-center gap-1.5 col-span-2">
-                  <span className="w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: '#7C3AED' }}>5</span>
-                  <input
-                    value={song.buttonLabels?.['5'] || ''}
-                    onChange={(e) => updateButtonLabel(song.id, '5', e.target.value)}
-                    placeholder="5e voix (optionnel)"
-                    className="flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700"
-                  />
-                </div>
+                {song.buttonLabels?.['5'] && (
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <input type="checkbox"
+                      checked={!(song.hiddenPupitres || []).includes('5')}
+                      onChange={() => toggleHiddenPupitre(song.id, '5')}
+                      className="accent-blue-600 flex-shrink-0 w-4 h-4"
+                    />
+                    <span className={`w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0 transition-opacity ${(song.hiddenPupitres || []).includes('5') ? 'opacity-30' : ''}`}
+                      style={{ backgroundColor: '#7C3AED' }}>5</span>
+                    <input
+                      value={song.buttonLabels?.['5'] || ''}
+                      onChange={(e) => updateButtonLabel(song.id, '5', e.target.value)}
+                      placeholder="5e voix (optionnel)"
+                      disabled={(song.hiddenPupitres || []).includes('5')}
+                      className={`flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700 ${(song.hiddenPupitres || []).includes('5') ? 'opacity-30' : ''}`}
+                    />
+                  </div>
+                )}
+                {!song.buttonLabels?.['5'] && (
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <span className="w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0 opacity-30"
+                      style={{ backgroundColor: '#7C3AED' }}>5</span>
+                    <input
+                      value=""
+                      onChange={(e) => updateButtonLabel(song.id, '5', e.target.value)}
+                      placeholder="5e voix (optionnel)"
+                      className="flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700"
+                    />
+                  </div>
+                )}
               </div>
               <p className="text-xs text-gray-500 mt-1">Notes d'attaque <span className="text-gray-400">(ex: Do3, Mi3)</span></p>
               {[...PUPITRES, ...(song.buttonLabels?.['5'] ? ['5'] : [])].map((p) => (
