@@ -893,12 +893,28 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
 // ─── Onglet Sets ───────────────────────────────────────────────────────────────
 function SetsTab() {
   const songs = useStore((s) => s.songs)
+  const settings = useStore((s) => s.settings)
   const { sets, addSet, updateSet, deleteSet } = useLibrary()
   const [showForm, setShowForm] = useState(false)
-  const [editSetId, setEditSetId] = useState(null)
+  const [showArchives, setShowArchives] = useState(false)
 
   const setArrangement = useStore((s) => s.setArrangement)
-  const reorderSetSongs = useStore((s) => s.reorderSetSongs)
+
+  // Séparation actifs / archivés (visibles par le créateur ou publics)
+  const visibleSets = sets.filter((s) =>
+    s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId
+  )
+  const activeSets   = visibleSets.filter((s) => !s.archived)
+  const archivedSets = visibleSets.filter((s) => s.archived)
+
+  const cardProps = (set) => ({
+    key: set.id,
+    set,
+    songs,
+    onDelete: () => deleteSet(set.id),
+    onUpdate: (u) => updateSet(set.id, u),
+    onSetArrangement: (songId, text) => setArrangement(set.id, songId, text),
+  })
 
   return (
     <div className="p-4">
@@ -918,18 +934,29 @@ function SetsTab() {
       )}
 
       <div className="space-y-3">
-        {sets.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">Aucun set créé</p>}
-        {sets.map((set) => (
-          <SetCard
-            key={set.id}
-            set={set}
-            songs={songs}
-            onDelete={() => deleteSet(set.id)}
-            onUpdate={(u) => updateSet(set.id, u)}
-            onSetArrangement={(songId, text) => setArrangement(set.id, songId, text)}
-          />
-        ))}
+        {activeSets.length === 0 && !showForm && (
+          <p className="text-center text-gray-400 py-8 text-sm">Aucun set actif</p>
+        )}
+        {activeSets.map((set) => <SetCard {...cardProps(set)} />)}
       </div>
+
+      {/* Section Archives */}
+      {archivedSets.length > 0 && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowArchives((v) => !v)}
+            className="flex items-center gap-2 text-sm text-gray-500 font-medium mb-3"
+          >
+            <span className={`transition-transform ${showArchives ? 'rotate-90' : ''}`}>▶</span>
+            Archives ({archivedSets.length})
+          </button>
+          {showArchives && (
+            <div className="space-y-3">
+              {archivedSets.map((set) => <SetCard {...cardProps(set)} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1001,15 +1028,20 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
   const activeConcertSetId   = useStore((s) => s.activeConcertSetId)
   const directorUnlocked     = useStore((s) => s.directorUnlocked)
   const directorPin          = useStore((s) => s.settings.directorPin)
+  const deviceId             = useStore((s) => s.settings.deviceId)
   const unlockDirector       = useStore((s) => s.unlockDirector)
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showPinForm, setShowPinForm]             = useState(false)
+  const [showUnarchiveForm, setShowUnarchiveForm] = useState(false)
+  const [unarchiveType, setUnarchiveType]         = useState(set.type || 'repetition')
   const [pinInput, setPinInput]                   = useState('')
   const [pinError, setPinError]                   = useState(false)
   const [showPin, setShowPin]                     = useState(false)
 
   const pinConfigured = !!directorPin
+  // Le créateur est celui dont le deviceId correspond, ou les sets sans creatorDeviceId (legacy)
+  const isOwner = !set.creatorDeviceId || set.creatorDeviceId === deviceId
 
   const handleDeleteClick = () => {
     if (!directorUnlocked && pinConfigured) {
@@ -1032,20 +1064,36 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
     }
   }
 
-  const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
+  const handleArchive = () => {
+    onUpdate({ archived: true, archivedAt: new Date().toISOString() })
+  }
 
+  const handleUnarchive = () => {
+    onUpdate({ archived: false, archivedAt: null, type: unarchiveType })
+    setShowUnarchiveForm(false)
+  }
+
+  const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
   const typeLabel = set.type === 'concert' ? '🎤 Concert' : '🎵 Répétition'
   const isActive = activeConcertSetId === set.id
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${isActive ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'}`}>
+    <div className={`border rounded-xl overflow-hidden ${
+      set.archived ? 'border-gray-200 dark:border-gray-700 opacity-80' :
+      isActive ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'
+    }`}>
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
         onClick={() => setExpanded((v) => !v)}
       >
         <div>
-          <p className="font-medium text-sm flex items-center gap-2">
+          <p className="font-medium text-sm flex items-center gap-2 flex-wrap">
             {set.name}
+            {set.archived && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
+                🗃 Archivé
+              </span>
+            )}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${set.visibility === 'public' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
               {set.visibility === 'public' ? '🌍 Public' : '🔒 Privé'}
             </span>
@@ -1070,7 +1118,7 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
             </div>
           ))}
           <div className="flex gap-2 mt-3 flex-wrap">
-            {set.type === 'concert' && (
+            {!set.archived && set.type === 'concert' && (
               <button
                 onClick={() => setActiveConcertSet(isActive ? null : set.id)}
                 className={`text-xs px-3 py-1.5 rounded-lg transition-colors
@@ -1091,18 +1139,62 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
                 {set.visibility === 'public' ? '🌍 Rendre privé' : '🌍 Rendre public'}
               </button>
             )}
-            <button
-              onClick={() => onUpdate({ archived: !set.archived })}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700"
-            >
-              {set.archived ? '📂 Désarchiver' : '🗃 Archiver'}
-            </button>
+            {/* Archiver / Désarchiver — réservé au créateur */}
+            {isOwner && !set.archived && (
+              <button
+                onClick={handleArchive}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+              >
+                🗃 Archiver
+              </button>
+            )}
+            {isOwner && set.archived && (
+              <button
+                onClick={() => setShowUnarchiveForm((v) => !v)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-600 dark:text-blue-400"
+              >
+                📂 Désarchiver
+              </button>
+            )}
             <button onClick={handleDeleteClick} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 flex items-center gap-1">
               🗑 Supprimer {pinConfigured && !directorUnlocked && <span className="opacity-60">🔒</span>}
             </button>
           </div>
 
-          {/* Demande de PIN */}
+          {/* Formulaire désarchivage avec choix de type */}
+          {showUnarchiveForm && (
+            <div className="mt-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3">
+              <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-2">
+                Remettre « {set.name} » sur quelle page ?
+              </p>
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setUnarchiveType('repetition')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    unarchiveType === 'repetition' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                  }`}
+                >🎵 Répétition</button>
+                <button
+                  onClick={() => setUnarchiveType('concert')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    unarchiveType === 'concert' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                  }`}
+                >🎤 Concert</button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUnarchive}
+                  className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium"
+                >Confirmer</button>
+                <button
+                  onClick={() => setShowUnarchiveForm(false)}
+                  className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600"
+                >Annuler</button>
+              </div>
+            </div>
+          )}
+
+          {/* Demande de PIN pour suppression */}
           {showPinForm && (
             <div className="mt-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-3">
               <p className="text-xs text-indigo-700 dark:text-indigo-300 font-medium mb-2">

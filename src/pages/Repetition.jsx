@@ -28,6 +28,7 @@ export default function Repetition() {
   const settings = useStore((s) => s.settings)
   // Sets visibles : type répétition (ou sans type = rétrocompat) + visibilité
   const sets = allSets.filter((s) =>
+    !s.archived &&
     (!s.type || s.type === 'repetition') &&
     (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )

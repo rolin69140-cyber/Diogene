@@ -35,6 +35,7 @@ export default function Concert() {
 
   // Sets visibles : type concert + visibilité + rétrocompat (sets anciens sans type → exclus ici)
   const sets = allSets.filter((s) =>
+    !s.archived &&
     s.type === 'concert' &&
     (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
