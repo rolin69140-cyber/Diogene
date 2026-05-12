@@ -104,23 +104,29 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
       let normalized
 
       if (allButtons.length > 1) {
-        const onsets = await Promise.all(allButtons.map(async (btn, i) => {
+        // Détections sérialisées (pas de Promise.all) pour éviter la limite d'AudioContext
+        // simultanés sur iOS Safari — un seul AudioContext actif à la fois.
+        const onsets = []
+        for (let i = 0; i < allButtons.length; i++) {
+          const btn = allButtons[i]
           // 1. Marqueur manuel (prioritaire, fiable)
           if (btn.syncMarker != null) {
             console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
-            return btn.syncMarker
+            onsets.push(btn.syncMarker)
+            continue
           }
           // 2. Cache auto (onset détecté lors d'une session précédente)
           if (btn.syncOffset != null) {
             console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
-            return btn.syncOffset
+            onsets.push(btn.syncOffset)
+            continue
           }
-          // 3. Détection RMS (fallback)
-          if (!allABs[i]) return 0
+          // 3. Détection RMS (fallback) — ne cache pas onset=0 (échec de détection)
+          if (!allABs[i]) { onsets.push(0); continue }
           const onset = await detectOnset(allABs[i])
-          setSyncOffset(song.id, btn.id, onset)
-          return onset
-        }))
+          if (onset > 0) setSyncOffset(song.id, btn.id, onset)
+          onsets.push(onset)
+        }
 
         // Normalisation sur le minimum → piste la plus en avance = offset 0
         const minOnset = Math.min(...onsets)
