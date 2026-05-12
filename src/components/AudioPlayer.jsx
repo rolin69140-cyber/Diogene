@@ -677,7 +677,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
           if (songPdfs.length <= 1) {
             return (
               <button
-                onClick={() => { onClose(); openLyrics(songId, songPdfs[0]?.id) }}
+                onClick={() => openLyrics(songId, songPdfs[0]?.id)}
                 className="w-full py-2 mb-3 text-sm font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 rounded-xl"
               >
                 📄 {songPdfs[0]?.label || 'Paroles'}
@@ -689,7 +689,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
               {songPdfs.map((pdf) => (
                 <button
                   key={pdf.id}
-                  onClick={() => { onClose(); openLyrics(songId, pdf.id) }}
+                  onClick={() => openLyrics(songId, pdf.id)}
                   className="flex-1 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 rounded-xl whitespace-nowrap"
                 >
                   📄 {pdf.label}
