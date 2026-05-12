@@ -435,24 +435,27 @@ export default function Concert() {
         </div>
       )}
 
-      {/* Modals AudioPlayer + Paroles */}
-      {playerState?.isOpen && (
-        <Suspense fallback={null}>
-          <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} buttonIds={playerState.buttonIds} onClose={closePlayer} />
-        </Suspense>
-      )}
-      {lyricsState?.isOpen && (
-        <Suspense fallback={null}>
-          <Paroles songId={lyricsState.songId} initialPdfId={lyricsState.pdfId} onClose={closeLyrics} />
-        </Suspense>
-      )}
-      {notesSongId && (
-        <NotesModal songId={notesSongId} onClose={() => setNotesSongId(null)} />
-      )}
-      {directorSongId && (
-        <DirectorNotesModal songId={directorSongId} onClose={() => setDirectorSongId(null)} />
-      )}
       </div>{/* fin relative z-10 */}
+
+    {/* Modals — en dehors du div z-10 pour éviter le problème de stacking context :
+        relative z-10 confine ses enfants à z-10 dans le contexte global, ce qui
+        placerait les modales DERRIÈRE la barre de nav (z-50 au niveau racine). */}
+    {playerState?.isOpen && (
+      <Suspense fallback={null}>
+        <AudioPlayer songId={playerState.songId} buttonId={playerState.buttonId} buttonIds={playerState.buttonIds} onClose={closePlayer} />
+      </Suspense>
+    )}
+    {lyricsState?.isOpen && (
+      <Suspense fallback={null}>
+        <Paroles songId={lyricsState.songId} initialPdfId={lyricsState.pdfId} onClose={closeLyrics} />
+      </Suspense>
+    )}
+    {notesSongId && (
+      <NotesModal songId={notesSongId} onClose={() => setNotesSongId(null)} />
+    )}
+    {directorSongId && (
+      <DirectorNotesModal songId={directorSongId} onClose={() => setDirectorSongId(null)} />
+    )}
 
     {/* SetPlaybackModal — en dehors du div z-10 pour que z-[150] soit global */}
     {playbackSetId && (() => {
