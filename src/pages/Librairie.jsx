@@ -690,10 +690,12 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
             <>
               {/* Affichage notes d'attaque */}
               <div className="grid grid-cols-2 gap-2 mt-3 mb-3">
-                {PUPITRES.map((p) => (
+                {[...PUPITRES, ...(song.buttonLabels?.['5'] ? ['5'] : [])].map((p) => (
                   <div key={p} className="flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: PUPITRE_COLORS[p] }}>{p}</span>
+                      style={{ backgroundColor: PUPITRE_COLORS[p] || '#7C3AED' }}>
+                      {song.buttonLabels?.[p] ? song.buttonLabels[p].slice(0, 2) : p}
+                    </span>
                     <span className="text-xs text-gray-600 dark:text-gray-400">
                       {Array.isArray(song.attackNotes?.[p]) ? song.attackNotes[p].join(', ') : song.attackNotes?.[p] || '—'}
                     </span>
@@ -1023,25 +1025,26 @@ function NewSetForm({ songs, onSave, onCancel }) {
 }
 
 function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
-  const [expanded, setExpanded] = useState(false)
-  const setActiveConcertSet  = useStore((s) => s.setActiveConcertSet)
-  const activeConcertSetId   = useStore((s) => s.activeConcertSetId)
-  const directorUnlocked     = useStore((s) => s.directorUnlocked)
-  const directorPin          = useStore((s) => s.settings.directorPin)
-  const deviceId             = useStore((s) => s.settings.deviceId)
-  const unlockDirector       = useStore((s) => s.unlockDirector)
-
+  const [expanded, setExpanded]               = useState(false)
+  const [showEditForm, setShowEditForm]       = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showPinForm, setShowPinForm]             = useState(false)
+  const [showPinForm, setShowPinForm]         = useState(false)
   const [showUnarchiveForm, setShowUnarchiveForm] = useState(false)
-  const [unarchiveType, setUnarchiveType]         = useState(set.type || 'repetition')
-  const [pinInput, setPinInput]                   = useState('')
-  const [pinError, setPinError]                   = useState(false)
-  const [showPin, setShowPin]                     = useState(false)
+  const [unarchiveType, setUnarchiveType]     = useState(set.type || 'repetition')
+  const [pinInput, setPinInput]               = useState('')
+  const [pinError, setPinError]               = useState(false)
+  const [showPin, setShowPin]                 = useState(false)
+
+  const setActiveConcertSet = useStore((s) => s.setActiveConcertSet)
+  const activeConcertSetId  = useStore((s) => s.activeConcertSetId)
+  const directorUnlocked    = useStore((s) => s.directorUnlocked)
+  const directorPin         = useStore((s) => s.settings.directorPin)
+  const deviceId            = useStore((s) => s.settings.deviceId)
+  const unlockDirector      = useStore((s) => s.unlockDirector)
 
   const pinConfigured = !!directorPin
-  // Le créateur est celui dont le deviceId correspond, ou les sets sans creatorDeviceId (legacy)
   const isOwner = !set.creatorDeviceId || set.creatorDeviceId === deviceId
+  const isActive = activeConcertSetId === set.id
 
   const handleDeleteClick = () => {
     if (!directorUnlocked && pinConfigured) {
@@ -1054,17 +1057,15 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
   const handlePinSubmit = () => {
     const ok = unlockDirector(pinInput)
     if (ok) {
-      setPinError(false)
-      setPinInput('')
-      setShowPinForm(false)
-      setShowDeleteConfirm(true)
+      setPinError(false); setPinInput(''); setShowPinForm(false); setShowDeleteConfirm(true)
     } else {
-      setPinError(true)
-      setPinInput('')
+      setPinError(true); setPinInput('')
     }
   }
 
   const handleArchive = () => {
+    // Si le set est actif pour le concert, le désactiver d'abord
+    if (isActive) setActiveConcertSet(null)
     onUpdate({ archived: true, archivedAt: new Date().toISOString() })
   }
 
@@ -1075,16 +1076,16 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
 
   const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
   const typeLabel = set.type === 'concert' ? '🎤 Concert' : '🎵 Répétition'
-  const isActive = activeConcertSetId === set.id
 
   return (
     <div className={`border rounded-xl overflow-hidden ${
       set.archived ? 'border-gray-200 dark:border-gray-700 opacity-80' :
       isActive ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'
     }`}>
+      {/* En-tête cliquable */}
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => { setExpanded((v) => !v); setShowEditForm(false) }}
       >
         <div>
           <p className="font-medium text-sm flex items-center gap-2 flex-wrap">
@@ -1105,63 +1106,78 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800">
-          {setSongs.length === 0 && <p className="text-xs text-gray-400 py-2">Aucun chant</p>}
-          {setSongs.map((song, idx) => (
-            <div key={song.id} className="py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
-              <p className="text-sm font-medium">{idx + 1}. {song.name}</p>
-              <input
-                placeholder="Arrangement (ex: B dès le début, T refrain…)"
-                value={set.arrangements?.[song.id] || ''}
-                onChange={(e) => onSetArrangement(song.id, e.target.value)}
-                className="w-full mt-1 text-xs border rounded px-2 py-1 dark:bg-gray-900 dark:border-gray-700"
-              />
-            </div>
-          ))}
-          <div className="flex gap-2 mt-3 flex-wrap">
-            {!set.archived && set.type === 'concert' && (
-              <button
-                onClick={() => setActiveConcertSet(isActive ? null : set.id)}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-colors
-                  ${isActive ? 'bg-blue-600 text-white' : 'border border-blue-500 text-blue-600'}`}
-              >
-                {isActive ? '✓ Set actif' : 'Activer pour le concert'}
-              </button>
-            )}
-            {directorUnlocked && (
-              <button
-                onClick={() => onUpdate({ visibility: set.visibility === 'public' ? 'private' : 'public' })}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                  set.visibility === 'public'
-                    ? 'border-green-400 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {set.visibility === 'public' ? '🌍 Rendre privé' : '🌍 Rendre public'}
-              </button>
-            )}
-            {/* Archiver / Désarchiver — réservé au créateur */}
-            {isOwner && !set.archived && (
-              <button
-                onClick={handleArchive}
-                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
-              >
-                🗃 Archiver
-              </button>
-            )}
-            {isOwner && set.archived && (
-              <button
-                onClick={() => setShowUnarchiveForm((v) => !v)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-600 dark:text-blue-400"
-              >
-                📂 Désarchiver
-              </button>
-            )}
-            <button onClick={handleDeleteClick} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 flex items-center gap-1">
-              🗑 Supprimer {pinConfigured && !directorUnlocked && <span className="opacity-60">🔒</span>}
-            </button>
-          </div>
 
-          {/* Formulaire désarchivage avec choix de type */}
+          {/* Mode édition */}
+          {showEditForm ? (
+            <EditSetForm
+              set={set}
+              songs={songs}
+              directorUnlocked={directorUnlocked}
+              onSave={(updates) => { onUpdate(updates); setShowEditForm(false) }}
+              onCancel={() => setShowEditForm(false)}
+            />
+          ) : (
+            <>
+              {/* Liste des chants */}
+              {setSongs.length === 0 && <p className="text-xs text-gray-400 py-2">Aucun chant</p>}
+              {setSongs.map((song, idx) => (
+                <div key={song.id} className="py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                  <p className="text-sm font-medium">{idx + 1}. {song.name}</p>
+                  <input
+                    placeholder="Arrangement (ex: B dès le début, T refrain…)"
+                    value={set.arrangements?.[song.id] || ''}
+                    onChange={(e) => onSetArrangement(song.id, e.target.value)}
+                    className="w-full mt-1 text-xs border rounded px-2 py-1 dark:bg-gray-900 dark:border-gray-700"
+                  />
+                </div>
+              ))}
+
+              {/* Activer pour concert (set non archivé, type concert) */}
+              {!set.archived && set.type === 'concert' && isOwner && (
+                <button
+                  onClick={() => setActiveConcertSet(isActive ? null : set.id)}
+                  className={`w-full mt-3 text-xs px-3 py-1.5 rounded-lg transition-colors
+                    ${isActive ? 'bg-blue-600 text-white' : 'border border-blue-500 text-blue-600'}`}
+                >
+                  {isActive ? '✓ Set actif pour le concert' : 'Activer pour le concert'}
+                </button>
+              )}
+
+              {/* 3 boutons fixes */}
+              <div className="flex gap-2 mt-3">
+                {/* Archiver / Désarchiver */}
+                {isOwner && (
+                  set.archived ? (
+                    <button
+                      onClick={() => setShowUnarchiveForm((v) => !v)}
+                      className="flex-1 text-xs py-2 rounded-lg border border-blue-300 text-blue-600 dark:text-blue-400 font-medium"
+                    >📂 Désarchiver</button>
+                  ) : (
+                    <button
+                      onClick={handleArchive}
+                      className="flex-1 text-xs py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 font-medium"
+                    >🗃 Archiver</button>
+                  )
+                )}
+                {/* Modifier */}
+                {isOwner && (
+                  <button
+                    onClick={() => setShowEditForm(true)}
+                    className="flex-1 text-xs py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium"
+                  >✏️ Modifier</button>
+                )}
+                {/* Supprimer */}
+                <button
+                  onClick={handleDeleteClick}
+                  className="flex-1 text-xs py-2 rounded-lg border border-red-200 text-red-500 font-medium flex items-center justify-center gap-1"
+                >
+                  🗑 Supprimer {pinConfigured && !directorUnlocked && <span className="opacity-60">🔒</span>}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Formulaire désarchivage */}
           {showUnarchiveForm && (
             <div className="mt-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3">
               <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-2">
@@ -1182,24 +1198,16 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
                 >🎤 Concert</button>
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={handleUnarchive}
-                  className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium"
-                >Confirmer</button>
-                <button
-                  onClick={() => setShowUnarchiveForm(false)}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600"
-                >Annuler</button>
+                <button onClick={handleUnarchive} className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium">Confirmer</button>
+                <button onClick={() => setShowUnarchiveForm(false)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600">Annuler</button>
               </div>
             </div>
           )}
 
-          {/* Demande de PIN pour suppression */}
+          {/* PIN suppression */}
           {showPinForm && (
             <div className="mt-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-3">
-              <p className="text-xs text-indigo-700 dark:text-indigo-300 font-medium mb-2">
-                Code requis pour supprimer un set
-              </p>
+              <p className="text-xs text-indigo-700 dark:text-indigo-300 font-medium mb-2">Code requis pour supprimer un set</p>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <input
@@ -1213,15 +1221,12 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
                       pinError ? 'border-red-400 bg-red-50' : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900'
                     }`}
                   />
-                  <button type="button" onClick={() => setShowPin(v => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  <button type="button" onClick={() => setShowPin(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     {showPin ? '🙈' : '👁'}
                   </button>
                 </div>
-                <button onClick={handlePinSubmit}
-                  className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium">OK</button>
-                <button onClick={() => { setShowPinForm(false); setPinError(false); setPinInput('') }}
-                  className="px-3 py-2 text-sm text-gray-500 rounded-lg bg-gray-100 dark:bg-gray-800">✕</button>
+                <button onClick={handlePinSubmit} className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium">OK</button>
+                <button onClick={() => { setShowPinForm(false); setPinError(false); setPinInput('') }} className="px-3 py-2 text-sm text-gray-500 rounded-lg bg-gray-100 dark:bg-gray-800">✕</button>
               </div>
               {pinError && <p className="text-xs text-red-500 mt-1">Code incorrect.</p>}
             </div>
@@ -1230,23 +1235,88 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
           {/* Confirmation suppression */}
           {showDeleteConfirm && (
             <div className="mt-3 bg-red-50 dark:bg-red-950/30 rounded-xl p-3">
-              <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-2">
-                Supprimer le set « {set.name} » ?
-              </p>
+              <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-2">Supprimer le set « {set.name} » ?</p>
               <div className="flex gap-2">
-                <button
-                  onClick={() => { onDelete(); setShowDeleteConfirm(false) }}
-                  className="flex-1 py-2 bg-red-500 text-white text-sm rounded-lg font-medium"
-                >Confirmer</button>
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600"
-                >Annuler</button>
+                <button onClick={() => { onDelete(); setShowDeleteConfirm(false) }} className="flex-1 py-2 bg-red-500 text-white text-sm rounded-lg font-medium">Confirmer</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600">Annuler</button>
               </div>
             </div>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
+  const [name, setName]               = useState(set.name || '')
+  const [date, setDate]               = useState(set.date || new Date().toISOString().slice(0, 10))
+  const [type, setType]               = useState(set.type || 'repetition')
+  const [selectedSongs, setSelectedSongs] = useState(set.songIds || [])
+  const [visibility, setVisibility]   = useState(set.visibility || 'private')
+
+  const toggleSong = (id) => setSelectedSongs((prev) =>
+    prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+  )
+
+  const handleSave = () => {
+    if (!name.trim()) return
+    onSave({ name: name.trim(), date, type, songIds: selectedSongs, visibility })
+  }
+
+  return (
+    <div className="mt-3 bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+      <h4 className="font-semibold text-sm mb-3">Modifier le set</h4>
+      <input
+        placeholder="Nom *"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="w-full border rounded-lg px-3 py-2 text-sm mb-2 dark:bg-gray-900 dark:border-gray-700"
+      />
+      <div className="flex gap-2 mb-2">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="flex-1 border rounded-lg px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700"
+        />
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="flex-1 border rounded-lg px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700"
+        >
+          <option value="repetition">Répétition</option>
+          <option value="concert">Concert</option>
+        </select>
+      </div>
+      {directorUnlocked && (
+        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+          <span className="text-xs text-gray-500 flex-1">Visibilité</span>
+          <button
+            type="button"
+            onClick={() => setVisibility('private')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visibility === 'private' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+          >🔒 Privé</button>
+          <button
+            type="button"
+            onClick={() => setVisibility('public')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visibility === 'public' ? 'bg-green-600 text-white' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+          >🌍 Public</button>
+        </div>
+      )}
+      <p className="text-xs text-gray-500 mb-2">Chants :</p>
+      <div className="max-h-40 overflow-y-auto space-y-1 mb-3 border rounded-lg p-2 dark:border-gray-700">
+        {[...songs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
+          <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded">
+            <input type="checkbox" checked={selectedSongs.includes(s.id)} onChange={() => toggleSong(s.id)} className="accent-blue-600" />
+            {s.name}
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleSave} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Enregistrer</button>
+        <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500">Annuler</button>
+      </div>
     </div>
   )
 }
