@@ -189,7 +189,8 @@ export default function DirectorNotesModal({ songId, onClose }) {
               value={text}
               onChange={handleChange}
               placeholder={`Instructions pour « ${song.name} »…\n\nEx : travailler la diction mesures 12–16, baisser les basses au refrain, tempo ♩=80…`}
-              className="w-full flex-1 resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed overflow-y-auto"
+              className="w-full resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed"
+              style={{ minHeight: '300px' }}
             />
           ) : (
             /* Mode lecture */
