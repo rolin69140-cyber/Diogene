@@ -61,7 +61,7 @@ export default function NotesModal({ songId, onClose }) {
 
       {/* Panneau */}
       <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-           style={{ maxHeight: '85dvh' }}>
+           style={{ height: '90dvh', maxHeight: '90dvh' }}>
 
         {/* En-tête */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
@@ -86,8 +86,7 @@ export default function NotesModal({ songId, onClose }) {
           value={text}
           onChange={handleChange}
           placeholder={`Notes pour « ${song.name} »…\n\nEx : retravailler la montée des sopranos, tempo plus lent au refrain…`}
-          className="flex-1 resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed"
-          style={{ minHeight: '220px' }}
+          className="flex-1 resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed overflow-y-auto"
         />
 
         {/* Pied : indicateur de sauvegarde */}
