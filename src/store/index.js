@@ -357,6 +357,18 @@ const useStore = create(
             }
           }
         }
+        // Filet de sécurité : si Firebase se déclenche avant l'hydration complète de Zustand,
+        // s.songs peut être vide. On lit aussi le localStorage pour ne pas perdre les notes.
+        // Dette technique : la solution propre serait de souscrire Firebase après onRehydrateStorage.
+        try {
+          const persisted = JSON.parse(localStorage.getItem('diogene-store') || '{}')
+          const persistedSongs = persisted?.state?.songs || []
+          for (const song of persistedSongs) {
+            if (song.notes && !localNotesMap[song.id]) {
+              localNotesMap[song.id] = song.notes
+            }
+          }
+        } catch (_) {}
         const merged = cloudSongs.map((song) => {
           // Migration : corriger les pupitres des boutons dont le label est dans LABEL_TO_PUPITRES
           // mais dont les pupitres actuels ne correspondent pas (ex. "S 2" avec pupitres:['S'] → ['5'])
