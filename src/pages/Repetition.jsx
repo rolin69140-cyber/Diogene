@@ -437,7 +437,7 @@ export default function Repetition() {
                       title="Notes du chef de chœur"
                     >
                       🎼
-                      {song.directorNotes?.trim() && (
+                      {directorNotesText?.trim() && (
                         <span className="absolute top-2 right-1.5 w-2 h-2 rounded-full bg-indigo-500" />
                       )}
                     </button>

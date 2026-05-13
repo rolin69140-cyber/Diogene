@@ -107,24 +107,6 @@ export async function deleteSet(setId) {
   await deleteDoc(doc(db, 'sets', setId))
 }
 
-/**
- * Sauvegarde les notes du chef de chœur pour un chant.
- */
-export async function saveDirectorNotes(songId, text) {
-  if (!FIREBASE_ENABLED || !db) return
-  await setDoc(doc(db, 'directorNotes', songId), { text, updatedAt: new Date().toISOString() })
-}
-
-/**
- * Écoute les notes du chef de chœur pour un chant.
- */
-export function subscribeDirectorNotes(songId, callback) {
-  if (!FIREBASE_ENABLED || !db) return () => {}
-  return onSnapshot(doc(db, 'directorNotes', songId), (snap) => {
-    callback(snap.exists() ? snap.data().text || '' : '')
-  })
-}
-
 // ─── Storage : fichiers audio et PDF ─────────────────────────────────────────
 
 /**
