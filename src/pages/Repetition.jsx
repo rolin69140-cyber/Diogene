@@ -32,7 +32,7 @@ export default function Repetition() {
     (!s.type || s.type === 'repetition') &&
     (s.visibility === 'public' || !s.creatorDeviceId || s.creatorDeviceId === settings.deviceId)
   )
-  const { deleteSongWithFiles } = useLibrary()
+  const { updateSet } = useLibrary()
   const activeSongId = useStore((s) => s.activeSongId)
   const setActiveSong = useStore((s) => s.setActiveSong)
   const openPlayer = useStore((s) => s.openPlayer)
@@ -72,7 +72,9 @@ export default function Repetition() {
 
   const filteredSongs = [...setFilteredSongs]
     .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name))
+    // Quand un set est actif, respecter l'ordre du set (défini dans Librairie)
+    // Quand "Tous" : tri alphabétique
+    .sort(activeSet ? undefined : (a, b) => a.name.localeCompare(b.name))
 
   // Trouver le meilleur fichier audio pour une sélection de pupitres
   // Exclure les pupitres masqués (décochés dans Librairie)
@@ -452,11 +454,18 @@ export default function Repetition() {
                         <span className="absolute top-2 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
                       )}
                     </button>
-                    {/* Bouton supprimer */}
-                    <button
-                      onClick={() => { if (confirm(`Supprimer "${song.name}" ?`)) deleteSongWithFiles(song.id) }}
-                      className="px-2.5 py-3.5 text-red-400 hover:text-red-600"
-                    >🗑</button>
+                    {/* Bouton retirer du set (visible seulement si un set est actif) */}
+                    {activeSet && (
+                      <button
+                        onClick={() => {
+                          const newIds = (activeSet.songIds || []).filter((id) => id !== song.id)
+                          updateSet(activeSet.id, { songIds: newIds })
+                          if (song.id === activeSongId) setActiveSong(null)
+                        }}
+                        className="px-2.5 py-3.5 text-red-400 hover:text-red-600"
+                        title="Retirer du set"
+                      >✕</button>
+                    )}
                   </>
                 )}
               </div>

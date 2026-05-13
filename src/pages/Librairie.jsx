@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/index'
 import useImportAudio, { PDF_LABELS, PDF_MAX } from '../hooks/useImportAudio'
 import useLibrary from '../hooks/useLibrary'
@@ -963,6 +963,81 @@ function SetsTab() {
   )
 }
 
+// ─── Liste ordonnée avec drag & drop (pointer events — iOS Safari + Android Chrome) ──
+// selectedIds : string[] dans l'ordre souhaité
+// onChange(newIds) : appelé à chaque réordonnancement
+function SortableSongList({ allSongs, selectedIds, onChange }) {
+  const listRef = useRef(null)
+  const dragIndexRef = useRef(null)
+
+  // Trouve l'index dans la liste d'après la position Y du pointer
+  const getIndexFromY = useCallback((y) => {
+    const items = listRef.current?.querySelectorAll('[data-sortable-item]')
+    if (!items) return selectedIds.length - 1
+    for (let i = 0; i < items.length; i++) {
+      const rect = items[i].getBoundingClientRect()
+      if (y < rect.top + rect.height / 2) return i
+    }
+    return items.length - 1
+  }, [selectedIds.length])
+
+  const onPointerDown = useCallback((e, idx) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragIndexRef.current = idx
+  }, [])
+
+  const onPointerMove = useCallback((e, idx) => {
+    if (dragIndexRef.current === null || dragIndexRef.current !== idx) return
+    const targetIdx = getIndexFromY(e.clientY)
+    if (targetIdx !== idx) {
+      const newIds = [...selectedIds]
+      const [moved] = newIds.splice(idx, 1)
+      newIds.splice(targetIdx, 0, moved)
+      dragIndexRef.current = targetIdx
+      onChange(newIds)
+    }
+  }, [selectedIds, onChange, getIndexFromY])
+
+  const onPointerUp = useCallback(() => {
+    dragIndexRef.current = null
+  }, [])
+
+  if (selectedIds.length === 0) return null
+  const songMap = Object.fromEntries(allSongs.map((s) => [s.id, s]))
+
+  return (
+    <div className="mt-3">
+      <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+        <span>Ordre du set</span>
+        <span className="text-gray-300 dark:text-gray-600">— glisser ⠿ pour réordonner</span>
+      </p>
+      <div ref={listRef} className="space-y-1 border rounded-lg p-2 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {selectedIds.map((id, idx) => {
+          const song = songMap[id]
+          if (!song) return null
+          return (
+            <div
+              key={id}
+              data-sortable-item
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm select-none touch-none"
+            >
+              <span className="text-gray-300 dark:text-gray-600 text-base leading-none cursor-grab active:cursor-grabbing"
+                style={{ touchAction: 'none' }}
+                onPointerDown={(e) => onPointerDown(e, idx)}
+                onPointerMove={(e) => onPointerMove(e, idx)}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
+              >⠿</span>
+              <span className="text-xs text-gray-400 w-4 text-right flex-shrink-0">{idx + 1}.</span>
+              <span className="flex-1 truncate">{song.name}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function NewSetForm({ songs, onSave, onCancel }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -1005,15 +1080,16 @@ function NewSetForm({ songs, onSave, onCancel }) {
         </div>
       )}
       <p className="text-xs text-gray-500 mb-2">Chants :</p>
-      <div className="max-h-40 overflow-y-auto space-y-1 mb-3 border rounded-lg p-2 dark:border-gray-700">
-        {songs.sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
+      <div className="max-h-40 overflow-y-auto space-y-1 mb-1 border rounded-lg p-2 dark:border-gray-700">
+        {[...songs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
           <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded">
             <input type="checkbox" checked={selectedSongs.includes(s.id)} onChange={() => toggleSong(s.id)} className="accent-blue-600" />
             {s.name}
           </label>
         ))}
       </div>
-      <div className="flex gap-2">
+      <SortableSongList allSongs={songs} selectedIds={selectedSongs} onChange={setSelectedSongs} />
+      <div className="flex gap-2 mt-3">
         <button
           onClick={() => { if (!name.trim()) return; onSave({ name, date, type, songIds: selectedSongs, visibility }) }}
           className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
@@ -1305,7 +1381,7 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
         </div>
       )}
       <p className="text-xs text-gray-500 mb-2">Chants :</p>
-      <div className="max-h-40 overflow-y-auto space-y-1 mb-3 border rounded-lg p-2 dark:border-gray-700">
+      <div className="max-h-40 overflow-y-auto space-y-1 mb-1 border rounded-lg p-2 dark:border-gray-700">
         {[...songs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
           <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded">
             <input type="checkbox" checked={selectedSongs.includes(s.id)} onChange={() => toggleSong(s.id)} className="accent-blue-600" />
@@ -1313,7 +1389,8 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
           </label>
         ))}
       </div>
-      <div className="flex gap-2">
+      <SortableSongList allSongs={songs} selectedIds={selectedSongs} onChange={setSelectedSongs} />
+      <div className="flex gap-2 mt-3">
         <button onClick={handleSave} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Enregistrer</button>
         <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500">Annuler</button>
       </div>
