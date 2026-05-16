@@ -49,6 +49,12 @@ export default function useAudioPlayer() {
   const bufferReadyRef     = useRef(false)  // AudioBuffer décodé et prêt
   const bufPlayingRef      = useRef(false)  // AudioBufferSourceNode en cours de lecture
 
+  // ── Multi-track AudioBuffer ───────────────────────────────────────────────
+  const secAudioBuffersRef = useRef([])     // AudioBuffer[] pistes secondaires
+  const secOffsetsRef      = useRef([])     // number[] offsets relatifs à la primaire
+  const secSourcesRef      = useRef([])     // AudioBufferSourceNode[] secondaires en cours
+  const multiTrackModeRef  = useRef(false)  // true quand enableMultiTrack a réussi
+
   // ── RAF ───────────────────────────────────────────────────────────────────
   const rafRef = useRef(null)
 
@@ -118,7 +124,8 @@ export default function useAudioPlayer() {
   const getBufferPosition = useCallback(() => {
     if (!bufPlayingRef.current) return bufStartOffsetRef.current
     const rawCtx  = Tone.getContext().rawContext
-    const elapsed = rawCtx.currentTime - bufStartCtxTimeRef.current
+    // Math.max(0,...) : le source est schedulé dans le futur (50ms), elapsed peut être négatif
+    const elapsed = Math.max(0, rawCtx.currentTime - bufStartCtxTimeRef.current)
     const dur     = audioBufferRef.current?.duration ?? Infinity
     return Math.min(bufStartOffsetRef.current + elapsed * (speedRef.current || 1), dur)
   }, [])
@@ -129,17 +136,34 @@ export default function useAudioPlayer() {
       try { bufSourceRef.current.stop()       } catch (_) {}
       try { bufSourceRef.current.disconnect() } catch (_) {}
     }
-    // native → native : pitchShift.input.input = GainNode natif (Gain.js:31 "this.input = this._gainNode")
     const rawCtx = Tone.getContext().rawContext
+    const dest   = pitchShiftRef.current ? pitchShiftRef.current.input.input : rawCtx.destination
+    const when   = rawCtx.currentTime
+
     const source = rawCtx.createBufferSource()
     source.buffer             = audioBufferRef.current
     source.playbackRate.value = speedRef.current
-    source.connect(pitchShiftRef.current.input.input)
-    bufStartCtxTimeRef.current = rawCtx.currentTime
+    source.connect(dest)
+    bufStartCtxTimeRef.current = when
     bufStartOffsetRef.current  = offset
-    source.start(rawCtx.currentTime, offset)
+    source.start(when, offset)
     bufSourceRef.current = source
     bufPlayingRef.current = true
+
+    // Restart secondaires au même instant (loop multi-track)
+    secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+    secSourcesRef.current = []
+    if (multiTrackModeRef.current) {
+      secAudioBuffersRef.current.forEach((ab, i) => {
+        const secOffset = Math.max(0, offset + (secOffsetsRef.current[i] || 0))
+        const s = rawCtx.createBufferSource()
+        s.buffer = ab
+        s.playbackRate.value = speedRef.current
+        s.connect(dest)
+        s.start(when, secOffset)
+        secSourcesRef.current.push(s)
+      })
+    }
   }, [])
 
   // ── RAF tick — barre de progression + gestion de fin de segment ───────────
@@ -194,6 +218,13 @@ export default function useAudioPlayer() {
   // ── Chargement fichier ────────────────────────────────────────────────────
 
   const loadFile = useCallback(async (fileId, storageUrl = null) => {
+    // Ne jamais réinitialiser l'état AudioBuffer si le mode multi-track est actif.
+    // enableMultiTrack gère ses propres buffers — loadFile effacerait bufferReadyRef.
+    if (multiTrackModeRef.current) {
+      console.log(`[Audio] loadFile(${fileId}) — ignoré (multi-track actif)`)
+      return true
+    }
+
     if (loadedFileIdRef.current === fileId && audioRef.current?.src) return true
 
     stopRaf()
@@ -315,7 +346,9 @@ export default function useAudioPlayer() {
 
   const play = useCallback(async (fromTime = null) => {
     const audio = getAudio()
-    if (!audio.src || loadErrorRef.current) return
+    // En mode multi-track AudioBuffer, audio.src peut être vide — on vérifie bufferReady
+    if (!audio.src && !bufferReadyRef.current) return
+    if (loadErrorRef.current) return
 
     const endPos = segEndRef.current ?? Infinity
 
@@ -330,38 +363,59 @@ export default function useAudioPlayer() {
       startPos = (isFinite(endPos) && cur >= endPos - 0.05) ? segStartRef.current : cur
     }
 
-    if (transposeRef.current !== 0 && bufferReadyRef.current) {
-      // ── Mode AudioBuffer (transposition tempo-preserving) ─────────────────
+    if ((transposeRef.current !== 0 || multiTrackModeRef.current) && bufferReadyRef.current) {
+      // ── Mode AudioBuffer (transposition ou multi-track) ───────────────────
       await Tone.start()
       const rawCtx = Tone.getContext().rawContext
       console.log(
-        `[Pitch] play() AudioBuffer — offset: ${startPos.toFixed(2)}s,`,
-        `pitch: ${transposeRef.current} demi-ton(s),`,
-        `ctxState: ${rawCtx.state},`,
-        `plateforme: ${/iPad|iPhone|iPod/.test(navigator.userAgent) ? 'iOS Safari' : 'Android/Desktop'}`
+        `[Audio] play() AudioBuffer — offset: ${startPos.toFixed(2)}s,`,
+        `pitch: ${transposeRef.current}, multiTrack: ${multiTrackModeRef.current},`,
+        `ctxState: ${rawCtx.state}`
       )
 
-      // Arrêter l'éventuel source précédent
+      // Arrêter les sources existantes
       if (bufSourceRef.current) {
         try { bufSourceRef.current.stop()       } catch (_) {}
         try { bufSourceRef.current.disconnect() } catch (_) {}
       }
+      secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+      secSourcesRef.current = []
 
-      // native → native : pitchShift.input.input = GainNode natif (Gain.js:31)
+      // Destination : PitchShift si transposition active, sinon sortie directe
+      const dest = transposeRef.current !== 0 && pitchShiftRef.current
+        ? pitchShiftRef.current.input.input
+        : rawCtx.destination
+
+      // Scheduling 50ms dans le futur → synchronisation sample-précise entre toutes les pistes
+      const when = rawCtx.currentTime + 0.05
+
+      // Piste primaire
       const source = rawCtx.createBufferSource()
       source.buffer             = audioBufferRef.current
       source.playbackRate.value = speedRef.current
-      source.connect(pitchShiftRef.current.input.input)
-
-      bufStartCtxTimeRef.current = rawCtx.currentTime
+      source.connect(dest)
+      bufStartCtxTimeRef.current = when
       bufStartOffsetRef.current  = startPos
-      source.start(rawCtx.currentTime, startPos)
+      source.start(when, startPos)
       bufSourceRef.current  = source
       bufPlayingRef.current = true
 
+      // Pistes secondaires — démarrent au même `when` → sync garantie au sample près
+      if (multiTrackModeRef.current && secAudioBuffersRef.current.length > 0) {
+        secAudioBuffersRef.current.forEach((ab, i) => {
+          const secStart = Math.max(0, startPos + (secOffsetsRef.current[i] || 0))
+          const s = rawCtx.createBufferSource()
+          s.buffer = ab
+          s.playbackRate.value = speedRef.current
+          s.connect(dest)
+          s.start(when, secStart)
+          secSourcesRef.current.push(s)
+        })
+        console.log(`[MultiTrack] ${secAudioBuffersRef.current.length} piste(s) démarrée(s) à ctx t=${when.toFixed(4)}s ✓`)
+      }
+
       setIsPlaying(true)
       isPlayingRef.current = true
-      console.log(`[Pitch] AudioBufferSourceNode démarré ✓ — pitch: ${transposeRef.current} demi-ton(s)`)
       startRaf()
 
     } else {
@@ -404,7 +458,7 @@ export default function useAudioPlayer() {
 
   const pause = useCallback(() => {
     if (bufPlayingRef.current) {
-      // Mode AudioBuffer : enregistrer la position, détruire le source node
+      // Mode AudioBuffer : enregistrer la position, détruire les source nodes
       const pos = getBufferPosition()
       bufStartOffsetRef.current = pos
       if (bufSourceRef.current) {
@@ -412,8 +466,11 @@ export default function useAudioPlayer() {
         try { bufSourceRef.current.disconnect() } catch (_) {}
         bufSourceRef.current = null
       }
+      // Arrêter les pistes secondaires
+      secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+      secSourcesRef.current = []
       bufPlayingRef.current = false
-      console.log(`[Pitch] pause() — position sauvegardée: ${pos.toFixed(2)}s`)
+      console.log(`[Audio] pause() AudioBuffer — position: ${pos.toFixed(2)}s`)
     } else {
       audioRef.current?.pause()
       console.log('[Audio] pause() HTMLAudioElement')
@@ -426,32 +483,52 @@ export default function useAudioPlayer() {
   // ── Seek ──────────────────────────────────────────────────────────────────
 
   const seek = useCallback((time) => {
-    if (transposeRef.current !== 0 && bufferReadyRef.current) {
+    if ((transposeRef.current !== 0 || multiTrackModeRef.current) && bufferReadyRef.current) {
       // Mode AudioBuffer : mise à jour de l'offset
       bufStartOffsetRef.current = time
       setCurrentTime(time)
       if (bufPlayingRef.current) {
-        // Recréer le source au nouvel offset (AudioBufferSourceNode non seekable)
+        // Recréer tous les source nodes au nouvel offset (AudioBufferSourceNode non seekable)
         if (bufSourceRef.current) {
           try { bufSourceRef.current.stop()       } catch (_) {}
           try { bufSourceRef.current.disconnect() } catch (_) {}
         }
+        secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+        secSourcesRef.current = []
+
         const rawCtx = Tone.getContext().rawContext
-        // native → native : pitchShift.input.input = GainNode natif (Gain.js:31)
+        const dest   = transposeRef.current !== 0 && pitchShiftRef.current
+          ? pitchShiftRef.current.input.input
+          : rawCtx.destination
+        const when   = rawCtx.currentTime
+
         const source = rawCtx.createBufferSource()
         source.buffer             = audioBufferRef.current
         source.playbackRate.value = speedRef.current
-        source.connect(pitchShiftRef.current.input.input)
-        bufStartCtxTimeRef.current = rawCtx.currentTime
-        source.start(rawCtx.currentTime, time)
+        source.connect(dest)
+        bufStartCtxTimeRef.current = when
+        source.start(when, time)
         bufSourceRef.current = source
-        console.log(`[Pitch] seek() — source recréé à ${time.toFixed(2)}s ✓`)
+
+        // Secondaires — même `when`
+        if (multiTrackModeRef.current) {
+          secAudioBuffersRef.current.forEach((ab, i) => {
+            const secTime = Math.max(0, time + (secOffsetsRef.current[i] || 0))
+            const s = rawCtx.createBufferSource()
+            s.buffer = ab
+            s.playbackRate.value = speedRef.current
+            s.connect(dest)
+            s.start(when, secTime)
+            secSourcesRef.current.push(s)
+          })
+        }
+        console.log(`[Audio] seek() AudioBuffer — toutes pistes recréées à ${time.toFixed(2)}s ✓`)
       }
     } else {
       if (audioRef.current) audioRef.current.currentTime = time
       setCurrentTime(time)
     }
-  }, [stopRaf])
+  }, [])
 
   const resetToSegmentStart = useCallback(() => {
     seek(segStartRef.current)
@@ -467,12 +544,13 @@ export default function useAudioPlayer() {
       bufStartOffsetRef.current  = getBufferPosition()
       bufStartCtxTimeRef.current = Tone.getContext().rawContext.currentTime
       bufSourceRef.current.playbackRate.value = newSpeed
+      // Mettre à jour le taux des pistes secondaires (AudioParam modifiable sur node vivant)
+      secSourcesRef.current.forEach((s) => { s.playbackRate.value = newSpeed })
       // Compenser la dérive de hauteur introduite par playbackRate ≠ 1
-      // playbackRate=1.2 monte de log2(1.2)×12 ≈ +3.16 st → PitchShift corrige en sens inverse
       if (pitchShiftRef.current) {
         pitchShiftRef.current.pitch = transposeRef.current - Math.log2(newSpeed) * 12
       }
-      console.log(`[Pitch] changeSpeed(${newSpeed}) en mode buffer — position resync ✓`)
+      console.log(`[Audio] changeSpeed(${newSpeed}) en mode buffer — position resync ✓`)
     } else if (audioRef.current) {
       // preservesPitch garantit tempo ≠ hauteur sur HTMLAudioElement (Chrome + Safari)
       audioRef.current.preservesPitch       = true
@@ -495,7 +573,7 @@ export default function useAudioPlayer() {
     setTranspose(semitones)
     transposeRef.current = semitones
 
-    // ── Retour au mode HTMLAudioElement (Orig) ────────────────────────────
+    // ── Retour au mode Orig (sans transposition) ─────────────────────────
     if (semitones === 0) {
       const pos = bufPlayingRef.current
         ? getBufferPosition()
@@ -510,12 +588,46 @@ export default function useAudioPlayer() {
         bufPlayingRef.current = false
       }
 
+      // Multi-track : rester en mode AudioBuffer, juste retirer le PitchShift
+      if (multiTrackModeRef.current && bufferReadyRef.current) {
+        bufStartOffsetRef.current = pos
+        if (isPlayingRef.current) {
+          // Relancer toutes les pistes sans pitch shift (connexion directe → destination)
+          const rawCtx = Tone.getContext().rawContext
+          const dest   = rawCtx.destination
+          const when   = rawCtx.currentTime
+
+          const source = rawCtx.createBufferSource()
+          source.buffer             = audioBufferRef.current
+          source.playbackRate.value = speedRef.current
+          source.connect(dest)
+          bufStartCtxTimeRef.current = when
+          source.start(when, pos)
+          bufSourceRef.current  = source
+          bufPlayingRef.current = true
+
+          secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+          secSourcesRef.current = []
+          secAudioBuffersRef.current.forEach((ab, i) => {
+            const secPos = Math.max(0, pos + (secOffsetsRef.current[i] || 0))
+            const s = rawCtx.createBufferSource()
+            s.buffer = ab
+            s.playbackRate.value = speedRef.current
+            s.connect(dest)
+            s.start(when, secPos)
+            secSourcesRef.current.push(s)
+          })
+          startRaf()
+          console.log(`[MultiTrack] Orig — reprise AudioBuffer à ${pos.toFixed(2)}s ✓`)
+        }
+        return
+      }
+
+      // Mono : retour à l'HTMLAudioElement
       const audio = getAudio()
-      // Restaurer la position sur l'HTMLAudioElement
       if (audio.src) {
         try { audio.currentTime = pos } catch (_) {}
       }
-
       if (isPlayingRef.current) {
         audio.playbackRate = speedRef.current
         try {
@@ -636,6 +748,80 @@ export default function useAudioPlayer() {
     }
   }, [getAudio, getBufferPosition, startRaf, stopRaf])
 
+  // ── Multi-track AudioBuffer : activation / désactivation ─────────────────
+
+  // Reçoit les ArrayBuffers bruts, les décode, démarre le mode multi-track.
+  // Appelé par AudioPlayer.jsx après vérification que tous les fichiers sont en IndexedDB.
+  const enableMultiTrack = useCallback(async (primaryArrayBuffer, secArrayBuffers, secOffsets) => {
+    await Tone.start()
+    const rawCtx = Tone.getContext().rawContext
+
+    // Décoder tous les ArrayBuffers en AudioBuffer (en parallèle)
+    let allBuffers
+    try {
+      allBuffers = await Promise.all(
+        [primaryArrayBuffer, ...secArrayBuffers].map((ab) =>
+          new Promise((resolve, reject) =>
+            rawCtx.decodeAudioData(ab.slice(0), resolve, reject)
+          )
+        )
+      )
+    } catch (e) {
+      console.error('[MultiTrack] enableMultiTrack — decodeAudioData ÉCHEC:', e)
+      throw e
+    }
+
+    const [primaryAB, ...secABs] = allBuffers
+
+    // Arrêter toute lecture en cours
+    if (bufSourceRef.current) {
+      try { bufSourceRef.current.stop()       } catch (_) {}
+      try { bufSourceRef.current.disconnect() } catch (_) {}
+      bufSourceRef.current = null
+    }
+    secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+    secSourcesRef.current = []
+    if (bufPlayingRef.current) {
+      bufPlayingRef.current = false
+      stopRaf()
+      setIsPlaying(false)
+      isPlayingRef.current = false
+    }
+
+    // Installer les buffers
+    audioBufferRef.current    = primaryAB
+    bufferReadyRef.current    = true
+    bufStartOffsetRef.current = 0
+    bufPlayingRef.current     = false
+
+    secAudioBuffersRef.current = secABs
+    secOffsetsRef.current      = secOffsets
+    multiTrackModeRef.current  = true
+
+    // Mettre à jour la durée et le segment
+    const dur = primaryAB.duration
+    setDuration(dur)
+    setSegmentEnd(dur);  segEndRef.current  = dur
+    setSegmentStart(0);  segStartRef.current = 0
+    setCurrentTime(0)
+
+    console.log(
+      `[MultiTrack] enableMultiTrack ✓ —`,
+      `${secABs.length} piste(s) secondaire(s),`,
+      `durée: ${dur.toFixed(1)}s,`,
+      `offsets: [${secOffsets.map((o) => (o * 1000).toFixed(0) + 'ms').join(', ')}]`
+    )
+  }, [stopRaf])
+
+  const disableMultiTrack = useCallback(() => {
+    secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+    secSourcesRef.current      = []
+    secAudioBuffersRef.current = []
+    secOffsetsRef.current      = []
+    multiTrackModeRef.current  = false
+    console.log('[MultiTrack] disableMultiTrack')
+  }, [])
+
   // ── Boucle ────────────────────────────────────────────────────────────────
 
   const toggleLoop = useCallback(() => {
@@ -666,17 +852,26 @@ export default function useAudioPlayer() {
         try { bufSourceRef.current.stop()       } catch (_) {}
         try { bufSourceRef.current.disconnect() } catch (_) {}
       }
+      secSourcesRef.current.forEach((s) => { try { s.stop() } catch (_) {} try { s.disconnect() } catch (_) {} })
+      secSourcesRef.current = []
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = '' }
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
       if (pitchShiftRef.current) { try { pitchShiftRef.current.dispose() } catch (_) {} }
     }
   }, [stopRaf])
 
+  // Lit la position réelle sans passer par l'état React (safe dans setInterval/setTimeout)
+  const getCurrentTime = useCallback(() => {
+    if (bufPlayingRef.current && bufferReadyRef.current) return getBufferPosition()
+    return audioRef.current?.currentTime ?? 0
+  }, [getBufferPosition])
+
   return {
     isPlaying, duration, currentTime, loop, speed, transpose,
     segmentStart, segmentEnd, loadError,
     loadFile, play, pause, seek, resetToSegmentStart,
     changeSpeed, changeTranspose, toggleLoop,
-    setSegment, resetSegment,
+    setSegment, resetSegment, getCurrentTime,
+    enableMultiTrack, disableMultiTrack,
   }
 }
