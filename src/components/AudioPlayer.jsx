@@ -110,26 +110,42 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
         return
       }
 
-      // 3. Calcul des onsets — sérialisé pour iOS (un seul AudioContext actif à la fois)
-      const onsets = []
-      for (let i = 0; i < allButtons.length; i++) {
-        const btn = allButtons[i]
-        if (btn.syncMarker != null) {
-          console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
-          onsets.push(btn.syncMarker); continue
-        }
-        if (btn.syncOffset != null) {
-          console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
-          onsets.push(btn.syncOffset); continue
-        }
-        const onset = await detectOnset(allABs[i])
-        if (onset > 0) setSyncOffset(song.id, btn.id, onset)
-        onsets.push(onset)
-      }
-      if (cancelled) return
+      // 3. Calcul des offsets de synchronisation
+      //
+      // Règle : si tous les fichiers ont la même taille (±5%), ils ont été enregistrés
+      // sur la même timeline absolue → offsets tous 0, detectOnset inutile et nuisible.
+      // detectOnset n'est utilisé que quand les fichiers ont des durées différentes
+      // (enregistrements découpés à l'entrée de chaque voix).
+      const sizes      = allABs.map((ab) => ab.byteLength)
+      const maxSize    = Math.max(...sizes)
+      const minSize    = Math.min(...sizes)
+      const sameDuration = (maxSize - minSize) / maxSize < 0.05  // ±5%
 
-      const minOnset = Math.min(...onsets)
-      const normalized = onsets.map((o) => Math.max(0, o - minOnset))
+      let normalized
+      if (sameDuration) {
+        console.log('[MultiTrack] Fichiers même durée (±5%) → offsets tous 0, detectOnset ignoré')
+        normalized = allButtons.map(() => 0)
+      } else {
+        // Fichiers de durées différentes : calcul des onsets pour aligner les voix
+        const onsets = []
+        for (let i = 0; i < allButtons.length; i++) {
+          const btn = allButtons[i]
+          if (btn.syncMarker != null) {
+            console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
+            onsets.push(btn.syncMarker); continue
+          }
+          if (btn.syncOffset != null) {
+            console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
+            onsets.push(btn.syncOffset); continue
+          }
+          const onset = await detectOnset(allABs[i])
+          if (onset > 0) setSyncOffset(song.id, btn.id, onset)
+          onsets.push(onset)
+        }
+        if (cancelled) return
+        const minOnset = Math.min(...onsets)
+        normalized = onsets.map((o) => Math.max(0, o - minOnset))
+      }
       console.log('[MultiTrack] Offsets normalisés :', allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', '))
 
       primaryOnsetRef.current    = normalized[0]
