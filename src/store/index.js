@@ -685,6 +685,21 @@ const useStore = create(
         get().updateSettings({ unlockedCodeVersion: null })
       },
 
+      // ── Mode admin ────────────────────────────────────────────────────────────
+      // adminUnlocked : session uniquement, jamais persisté.
+      adminUnlocked: false,
+
+      unlockAdmin: (pin) => {
+        const adminPin = import.meta.env.VITE_ADMIN_PIN
+        if (!adminPin || pin === adminPin) {
+          set({ adminUnlocked: true })
+          return true
+        }
+        return false
+      },
+
+      lockAdmin: () => set({ adminUnlocked: false }),
+
       // ── Export / Import ────────────────────────────────────────────────────
       exportConfig: () => {
         const { songs, sets, settings } = get()
