@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import useStore, { getAudioFile } from '../store/index'
+import useStore, { getAudioFile, saveAudioFile } from '../store/index'
 import useAudioPlayer from '../hooks/useAudioPlayer'
 import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
@@ -47,6 +47,11 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
   const { playPupitre } = usePianoSynth()
   const [showMetronome, setShowMetronome] = useState(false)
   const [markerMenu, setMarkerMenu] = useState(null)
+  // Fichiers manquants dans IndexedDB (mode multi-track) — [] = tous présents
+  const [missingButtons, setMissingButtons] = useState([])
+  const [downloadStatus, setDownloadStatus] = useState(null) // null | 'loading' | 'done' | 'error'
+  // Incrémenté après un téléchargement réussi pour forcer le rechargement des pistes
+  const [trackReloadKey, setTrackReloadKey] = useState(0)
 
   // Refs DOM
   const progressBarRef  = useRef(null)
@@ -58,233 +63,141 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
   // Ref stable vers startDrag (évite de ré-attacher les listeners DOM à chaque render)
   const startDragRef = useRef(null)
 
-  // ── Multi-pistes (secondaires) ────────────────────────────────────────────
-  const secondaryAudiosRef  = useRef([])   // HTMLAudioElement[] — pistes supplémentaires
-  const blobUrlsSecRef      = useRef([])   // blob URLs secondaires à révoquer
-  const relativeOffsetsRef  = useRef([])   // nombre[] : onset secondaire[i] − onset primaire
-  const primaryOnsetRef     = useRef(0)    // onset normalisé de la piste primaire
-  const multiTrackRef       = useRef(false)// vrai si plusieurs pistes chargées
-  const currentTimeRef      = useRef(0)    // miroir ref de player.currentTime (pour interval)
+  // ── Multi-pistes ──────────────────────────────────────────────────────────
+  const relativeOffsetsRef = useRef([])  // nombre[] : onset secondaire[i] − onset primaire
+  const primaryOnsetRef    = useRef(0)   // onset normalisé de la piste primaire
+  const multiTrackRef      = useRef(false)
 
-  useEffect(() => { currentTimeRef.current = player.currentTime }, [player.currentTime])
-
-  // Chargement et sync des pistes secondaires
+  // ── Chargement multi-pistes en mode AudioBuffer ───────────────────────────
+  // Tous les fichiers doivent être dans IndexedDB. Si l'un manque → message download.
+  // AudioBufferSourceNode.start(when) garantit une sync au sample près sur iOS Safari.
   useEffect(() => {
-    // Cleanup toujours effectué en premier
-    secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
-    secondaryAudiosRef.current = []
-    blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
-    blobUrlsSecRef.current = []
+    player.disableMultiTrack()
     relativeOffsetsRef.current = []
-    primaryOnsetRef.current = 0
-    multiTrackRef.current = false
+    primaryOnsetRef.current    = 0
+    multiTrackRef.current      = false
+    setMissingButtons([])
+    setDownloadStatus(null)
 
     if (!extraButtons.length || !button || !song) return
 
     const allButtons = [button, ...extraButtons]
+    let cancelled = false
 
     ;(async () => {
-      // Récupération des ArrayBuffers depuis IndexedDB
+      // 1. Lecture des ArrayBuffers depuis IndexedDB (primaire + secondaires)
       const allABs = await Promise.all(allButtons.map(async (btn) => {
-        if (!btn?.fileId) return null
+        const key = btn?.fileId || btn?.id
+        if (!key) return null
         try {
-          const record = await getAudioFile(btn.fileId)
+          const record = await getAudioFile(key)
           if (record?.data) {
+            console.log(`[MultiTrack] IndexedDB ✓ "${btn.label}"`)
             return record.data instanceof ArrayBuffer
               ? record.data
               : await record.data.arrayBuffer?.()
           }
         } catch (_) {}
+        console.log(`[MultiTrack] IndexedDB non trouvé "${btn.label}" → téléchargement requis`)
         return null
       }))
+      if (cancelled) return
 
-      // ── Calcul des onsets (multi-pistes uniquement) ───────────────────────
-      // Priorité : syncMarker (saisi manuellement) > syncOffset (cache auto) > detectOnset
-      // Sans multi-pistes → offsets à 0, aucun calcul.
-      let normalized
-
-      if (allButtons.length > 1) {
-        // Détections sérialisées (pas de Promise.all) pour éviter la limite d'AudioContext
-        // simultanés sur iOS Safari — un seul AudioContext actif à la fois.
-        const onsets = []
-        for (let i = 0; i < allButtons.length; i++) {
-          const btn = allButtons[i]
-          // 1. Marqueur manuel (prioritaire, fiable)
-          if (btn.syncMarker != null) {
-            console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
-            onsets.push(btn.syncMarker)
-            continue
-          }
-          // 2. Cache auto (onset détecté lors d'une session précédente)
-          if (btn.syncOffset != null) {
-            console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
-            onsets.push(btn.syncOffset)
-            continue
-          }
-          // 3. Détection RMS (fallback) — ne cache pas onset=0 (échec de détection)
-          if (!allABs[i]) { onsets.push(0); continue }
-          const onset = await detectOnset(allABs[i])
-          if (onset > 0) setSyncOffset(song.id, btn.id, onset)
-          onsets.push(onset)
-        }
-
-        // Normalisation sur le minimum → piste la plus en avance = offset 0
-        const minOnset = Math.min(...onsets)
-        normalized = onsets.map((o) => Math.max(0, o - minOnset))
-        console.log(
-          '[MultiTrack] Offsets normalisés :',
-          allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', ')
-        )
-      } else {
-        normalized = [0]
+      // 2. Vérifier que tous les fichiers sont présents
+      const missing = allButtons.filter((_, i) => !allABs[i])
+      if (missing.length > 0) {
+        setMissingButtons(missing)
+        return
       }
 
-      primaryOnsetRef.current = normalized[0]
+      // 3. Calcul des onsets — sérialisé pour iOS (un seul AudioContext actif à la fois)
+      const onsets = []
+      for (let i = 0; i < allButtons.length; i++) {
+        const btn = allButtons[i]
+        if (btn.syncMarker != null) {
+          console.log(`[MultiTrack] Marqueur manuel "${btn.label}": ${btn.syncMarker}s`)
+          onsets.push(btn.syncMarker); continue
+        }
+        if (btn.syncOffset != null) {
+          console.log(`[MultiTrack] Onset en cache "${btn.label}": ${btn.syncOffset.toFixed(3)}s`)
+          onsets.push(btn.syncOffset); continue
+        }
+        const onset = await detectOnset(allABs[i])
+        if (onset > 0) setSyncOffset(song.id, btn.id, onset)
+        onsets.push(onset)
+      }
+      if (cancelled) return
+
+      const minOnset = Math.min(...onsets)
+      const normalized = onsets.map((o) => Math.max(0, o - minOnset))
+      console.log('[MultiTrack] Offsets normalisés :', allButtons.map((b, i) => `${b.label}=${normalized[i].toFixed(3)}s`).join(', '))
+
+      primaryOnsetRef.current    = normalized[0]
       relativeOffsetsRef.current = normalized.slice(1).map((o) => o - normalized[0])
 
-      // Création des HTMLAudioElement secondaires
-      // waitCanPlay : attend readyState >= 2 ou erreur (max 4s)
-      // → garantit que currentTime est applicable, et filtre les pistes qui échouent (ex. CORS iOS)
-      const waitCanPlay = (a) => new Promise((resolve) => {
-        if (a.readyState >= 2) { resolve(true); return }
-        const cleanup = (ok) => {
-          a.removeEventListener('canplay', onOk)
-          a.removeEventListener('error',   onErr)
-          resolve(ok)
-        }
-        const onOk  = () => cleanup(true)
-        const onErr = () => cleanup(false)
-        a.addEventListener('canplay', onOk)
-        a.addEventListener('error',   onErr)
-        setTimeout(() => cleanup(a.readyState >= 2), 4000)
-      })
-
-      const audios = await Promise.all(extraButtons.map(async (btn, i) => {
-        const a = new Audio()
-        a.playbackRate = player.speed
-        if (allABs[i + 1]) {
-          const blob = new Blob([allABs[i + 1]], { type: 'audio/mpeg' })
-          const url = URL.createObjectURL(blob)
-          blobUrlsSecRef.current.push(url)
-          a.src = url
-        } else if (btn.storageUrl) {
-          a.src = btn.storageUrl
-        } else {
-          return null
-        }
-        // Attendre que l'audio soit prêt avant de l'utiliser
-        const ok = await waitCanPlay(a)
-        if (!ok) {
-          console.warn(`[MultiTrack] "${btn.label}" — échec chargement, piste ignorée`)
-          a.src = ''
-          return null
-        }
-        a.currentTime = Math.max(0, relativeOffsetsRef.current[i] || 0)
-        return a
-      }))
-
-      secondaryAudiosRef.current = audios.filter(Boolean)
-      multiTrackRef.current = secondaryAudiosRef.current.length > 0
-
-      // Positionner la piste primaire à son onset si elle est à 0
-      if (multiTrackRef.current && primaryOnsetRef.current > 0 && player.currentTime < 0.1) {
-        player.seek(primaryOnsetRef.current)
+      // 4. Activer le mode AudioBuffer — decode + setup dans useAudioPlayer
+      try {
+        await player.enableMultiTrack(allABs[0], allABs.slice(1), relativeOffsetsRef.current)
+        if (cancelled) return
+        multiTrackRef.current = true
+        // Positionner à l'onset de la piste primaire
+        if (primaryOnsetRef.current > 0.01) player.seek(primaryOnsetRef.current)
+      } catch (e) {
+        console.error('[MultiTrack] enableMultiTrack ÉCHEC:', e)
+        setMissingButtons([{ id: '__error__', label: '(erreur de décodage)' }])
       }
     })()
 
-    return () => {
-      secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
-      blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
-    }
-  }, [buttonIds.join(','), song?.id]) // eslint-disable-line
+    return () => { cancelled = true; player.disableMultiTrack(); multiTrackRef.current = false }
+  }, [buttonIds.join(','), song?.id, trackReloadKey]) // eslint-disable-line
 
-  // Re-sync secondaires quand paused + currentTime change (seek utilisateur)
-  useEffect(() => {
-    if (player.isPlaying || !multiTrackRef.current) return
-    const t = player.currentTime
-    secondaryAudiosRef.current.forEach((a, i) => {
-      const target = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
-      if (Math.abs(a.currentTime - target) > 0.05) a.currentTime = target
-    })
-  }, [player.currentTime, player.isPlaying])
-
-  // Correction de dérive toutes les 2 s pendant la lecture
-  // Si après 2 tentatives la dérive persiste (iOS ne peut pas setter currentTime en cours de lecture),
-  // on abandonne pour cette piste pour éviter la boucle infinie de logs.
-  const resyncFailCountRef = useRef([])
-  useEffect(() => {
-    if (!player.isPlaying || !multiTrackRef.current) return
-    resyncFailCountRef.current = secondaryAudiosRef.current.map(() => 0)
-    const id = setInterval(() => {
-      const t = currentTimeRef.current
-      secondaryAudiosRef.current.forEach((a, i) => {
-        if ((resyncFailCountRef.current[i] || 0) >= 3) return // abandon après 3 échecs
-        const expected = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
-        const drift = Math.abs(a.currentTime - expected)
-        if (drift > 0.15) {
-          const before = a.currentTime
-          a.currentTime = expected
-          // Vérifier si le seek a été pris en compte (iOS bloque parfois currentTime pendant lecture)
-          setTimeout(() => {
-            if (Math.abs(a.currentTime - expected) > 0.15) {
-              resyncFailCountRef.current[i] = (resyncFailCountRef.current[i] || 0) + 1
-              console.warn(`[MultiTrack] Re-sync ${i} ignoré par iOS (${resyncFailCountRef.current[i]}/3)`)
-            }
-          }, 100)
-          console.log(`[MultiTrack] Re-sync secondaire ${i}: dérive ${(drift * 1000).toFixed(0)}ms`)
-        } else {
-          resyncFailCountRef.current[i] = 0 // dérive ok → reset compteur
-        }
-      })
-    }, 2000)
-    return () => clearInterval(id)
-  }, [player.isPlaying])
-
-  // Nettoyage global au démontage
-  useEffect(() => {
-    return () => {
-      secondaryAudiosRef.current.forEach((a) => { a.pause(); a.src = '' })
-      blobUrlsSecRef.current.forEach((url) => { try { URL.revokeObjectURL(url) } catch (_) {} })
-    }
-  }, [])
-
-  // ── Wrappers play/pause/seek/reset/speed (synchronisent les secondaires) ───
+  // ── Wrappers play/pause/reset/speed ──────────────────────────────────────
+  // useAudioPlayer gère maintenant toutes les pistes en interne.
   const handlePlayPause = useCallback(() => {
-    if (!multiTrackRef.current) {
-      player.isPlaying ? player.pause() : player.play()
-      return
-    }
     if (player.isPlaying) {
       player.pause()
-      secondaryAudiosRef.current.forEach((a) => a.pause())
     } else {
       const t = player.currentTime
-      const isAtStart = t <= (player.segmentStart || 0) + 0.1
-      const startPos = isAtStart ? primaryOnsetRef.current : t
+      const startPos = t <= (player.segmentStart || 0) + 0.1 ? primaryOnsetRef.current : t
       player.play(startPos)
-      secondaryAudiosRef.current.forEach((a, i) => {
-        a.currentTime = Math.max(0, startPos + (relativeOffsetsRef.current[i] || 0))
-        a.playbackRate = player.speed
-        a.play().catch(() => {})
-      })
     }
   }, [player])
 
-  const handleReset = useCallback(() => {
-    if (multiTrackRef.current) {
-      const resetPos = Math.max(player.segmentStart, primaryOnsetRef.current)
-      player.seek(resetPos)
-      secondaryAudiosRef.current.forEach((a, i) => {
-        a.currentTime = Math.max(0, resetPos + (relativeOffsetsRef.current[i] || 0))
-      })
-    } else {
-      player.resetToSegmentStart()
+  // Télécharge tous les fichiers manquants en parallèle → IndexedDB (via proxy Vercel)
+  // Après succès : recharge via trackReloadKey (l'effect relira IndexedDB → enableMultiTrack)
+  const downloadAllTracks = useCallback(async () => {
+    const toDownload = missingButtons.filter((btn) => btn?.storageUrl && (btn?.fileId || btn?.id))
+    if (!toDownload.length) {
+      console.warn('[MultiTrack] downloadAllTracks — aucune piste téléchargeable (storageUrl/id manquant ?)')
+      return
     }
+    setDownloadStatus('loading')
+    try {
+      await Promise.all(toDownload.map(async (btn) => {
+        const key = btn.fileId || btn.id
+        const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(btn.storageUrl)}`
+        console.log(`[MultiTrack] Téléchargement "${btn.label}" (key: ${key})...`)
+        const resp = await fetch(proxyUrl)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const arrayBuffer = await resp.arrayBuffer()
+        await saveAudioFile(key, arrayBuffer, btn.label || key, 'audio/mpeg')
+        console.log(`[MultiTrack] "${btn.label}" sauvegardée (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)} Mo)`)
+      }))
+      setDownloadStatus('done')
+      setTrackReloadKey((k) => k + 1)
+    } catch (e) {
+      console.error('[MultiTrack] Échec téléchargement:', e)
+      setDownloadStatus('error')
+    }
+  }, [missingButtons])
+
+  const handleReset = useCallback(() => {
+    const resetPos = Math.max(player.segmentStart || 0, primaryOnsetRef.current)
+    player.seek(resetPos)
   }, [player])
 
   const handleChangeSpeed = useCallback((newSpeed) => {
     player.changeSpeed(newSpeed)
-    secondaryAudiosRef.current.forEach((a) => { a.playbackRate = newSpeed })
   }, [player])
 
   // Dessiner la waveform
@@ -305,7 +218,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
       const audioCtx = new OfflineAudioContext(1, 44100, 44100)
       let decoded
       try { decoded = await audioCtx.decodeAudioData(arrayBuf.slice(0)) } catch { return }
-      audioCtx.close()
+      // OfflineAudioContext n'a pas de .close() — pas besoin, le GC s'en charge
       if (cancelled) return
       const canvas = canvasRef.current
       if (!canvas) return
@@ -335,8 +248,12 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
 
   useEffect(() => {
     if (!button?.fileId) return
+    // Multi-track : la piste primaire est chargée via enableMultiTrack (ArrayBuffer depuis IndexedDB).
+    // On teste buttonIds.length > 1 (prop stable dès le 1er render) plutôt que extraButtons.length
+    // qui dépend de song.audioButtons — peut être vide si Firebase n'a pas encore hydraté le store.
+    if (buttonIds.length > 1) return
     player.loadFile(button.fileId, button.storageUrl || null)
-  }, [button?.fileId])
+  }, [button?.fileId, buttonIds.length])
 
   // Convertit une position X en temps
   const xToTime = useCallback((clientX) => {
@@ -369,13 +286,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
     const moveAt = (x) => {
       const t = xToTime(x)
       if (isDraggingRef.current === 'seek') {
-        player.seek(t)
-        // Sync secondaires pendant le seek (multi-pistes)
-        if (multiTrackRef.current) {
-          secondaryAudiosRef.current.forEach((a, i) => {
-            a.currentTime = Math.max(0, t + (relativeOffsetsRef.current[i] || 0))
-          })
-        }
+        player.seek(t)  // gère primaire + secondaires en mode AudioBuffer
       } else if (isDraggingRef.current === 'segStart') {
         const newStart = Math.min(t, (player.segmentEnd ?? player.duration) - 0.5)
         console.log(`[Curseur] segStart → ${newStart.toFixed(2)}s`)
@@ -604,6 +515,32 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
           </div>
           <span>{formatTime(player.duration)}</span>
         </div>
+
+        {/* Bandeau téléchargement — affiché si des pistes manquent dans IndexedDB */}
+        {missingButtons.length > 0 && (
+          <div className="mb-4 rounded-xl border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-950 px-3 py-2.5">
+            <p className="text-xs text-orange-700 dark:text-orange-300 mb-2">
+              Pistes non disponibles localement ({missingButtons.map((b) => b.label).join(', ')}) — télécharger pour activer la synchronisation multi-pistes.
+            </p>
+            <button
+              onClick={downloadAllTracks}
+              disabled={downloadStatus === 'loading' || downloadStatus === 'done'}
+              className={`w-full py-2 rounded-lg text-xs font-medium transition-colors
+                ${downloadStatus === 'done'
+                  ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+                  : downloadStatus === 'error'
+                  ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+                  : downloadStatus === 'loading'
+                  ? 'bg-orange-100 dark:bg-orange-900 text-orange-500 dark:text-orange-400'
+                  : 'bg-orange-500 text-white active:bg-orange-600'}`}
+            >
+              {downloadStatus === 'loading' ? '⏳ Téléchargement en cours...'
+                : downloadStatus === 'done' ? '✓ Pistes enregistrées'
+                : downloadStatus === 'error' ? '⚠️ Erreur — réessayer'
+                : `⬇ Télécharger (${missingButtons.length} piste${missingButtons.length > 1 ? 's' : ''})`}
+            </button>
+          </div>
+        )}
 
         {/* Contrôles principaux */}
         <div className="flex items-center gap-3 justify-center mb-4">

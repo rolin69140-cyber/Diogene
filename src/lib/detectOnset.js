@@ -36,9 +36,9 @@ export async function detectOnset(arrayBuffer) {
     const decoded  = await new Promise((resolve, reject) =>
       tmpCtx.decodeAudioData(arrayBuffer.slice(0), resolve, reject)
     )
-    // AudioContext.close() n'existe pas sur iOS < 14.1 ; on vérifie avant d'appeler.
-    // On n'attend pas la Promise — inutile pour la détection d'onset.
-    if (tmpCtx.close) tmpCtx.close().catch(() => {})
+    // AudioContext.close() peut être absent (iOS < 14.1) ou ne pas retourner une Promise.
+    // Optional chaining + try/catch : safe dans tous les cas.
+    try { tmpCtx.close?.() } catch (_) {}
 
     const samples    = decoded.getChannelData(0)
     const totalBlocs = Math.floor(samples.length / blockSize)
