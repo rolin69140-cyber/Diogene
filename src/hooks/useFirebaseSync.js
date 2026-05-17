@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import useStore from '../store/index'
 import { generateUUID } from '../store/index'
-import { subscribeSongs, subscribeSets, subscribeAppConfig, saveSong as fbSaveSong, saveSet as fbSaveSet } from '../lib/firebaseSync'
+import { subscribeSongs, subscribeSets, subscribeAppConfig, subscribeActivityLog, saveSong as fbSaveSong, saveSet as fbSaveSet } from '../lib/firebaseSync'
 import { FIREBASE_ENABLED as FB } from '../lib/firebase'
 
 
@@ -25,6 +25,7 @@ export default function useFirebaseSync() {
   const [migrating, setMigrating] = useState(false)
   const [migrateProgress, setMigrateProgress] = useState('')
   const [appConfig, setAppConfig] = useState({ maintenanceMode: false })
+  const [activityLog, setActivityLog] = useState([])
 
   // Flags pour éviter de déclencher la migration deux fois
   const songsMigratedRef = useRef(false)
@@ -144,12 +145,15 @@ export default function useFirebaseSync() {
       }
     })
 
+    const unsubActivity = subscribeActivityLog(setActivityLog)
+
     return () => {
       unsubSongs.current?.()
       unsubSets.current?.()
       unsubConfig.current?.()
+      unsubActivity?.()
     }
   }, []) // eslint-disable-line
 
-  return { syncReady, firebaseEnabled: FB, migrating, migrateProgress, appConfig }
+  return { syncReady, firebaseEnabled: FB, migrating, migrateProgress, appConfig, activityLog }
 }

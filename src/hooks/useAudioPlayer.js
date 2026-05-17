@@ -155,12 +155,12 @@ export default function useAudioPlayer() {
     secSourcesRef.current = []
     if (multiTrackModeRef.current) {
       secAudioBuffersRef.current.forEach((ab, i) => {
-        const secOffset = Math.max(0, offset + (secOffsetsRef.current[i] || 0))
+        const rawOff = offset + (secOffsetsRef.current[i] || 0)
         const s = rawCtx.createBufferSource()
         s.buffer = ab
         s.playbackRate.value = speedRef.current
         s.connect(dest)
-        s.start(when, secOffset)
+        if (rawOff < 0) { s.start(when - rawOff, 0) } else { s.start(when, rawOff) }
         secSourcesRef.current.push(s)
       })
     }
@@ -403,12 +403,19 @@ export default function useAudioPlayer() {
       // Pistes secondaires — démarrent au même `when` → sync garantie au sample près
       if (multiTrackModeRef.current && secAudioBuffersRef.current.length > 0) {
         secAudioBuffersRef.current.forEach((ab, i) => {
-          const secStart = Math.max(0, startPos + (secOffsetsRef.current[i] || 0))
+          const rawOffset = startPos + (secOffsetsRef.current[i] || 0)
           const s = rawCtx.createBufferSource()
           s.buffer = ab
           s.playbackRate.value = speedRef.current
           s.connect(dest)
-          s.start(when, secStart)
+          // Si rawOffset < 0 : la piste secondaire n'a pas encore commencé à ce point de la timeline.
+          // On la schedule dans le futur (when - rawOffset) depuis le début du buffer.
+          // Si rawOffset ≥ 0 : démarrage normal depuis rawOffset dans le buffer.
+          if (rawOffset < 0) {
+            s.start(when - rawOffset, 0)
+          } else {
+            s.start(when, rawOffset)
+          }
           secSourcesRef.current.push(s)
         })
         console.log(`[MultiTrack] ${secAudioBuffersRef.current.length} piste(s) démarrée(s) à ctx t=${when.toFixed(4)}s ✓`)
@@ -513,12 +520,16 @@ export default function useAudioPlayer() {
         // Secondaires — même `when`
         if (multiTrackModeRef.current) {
           secAudioBuffersRef.current.forEach((ab, i) => {
-            const secTime = Math.max(0, time + (secOffsetsRef.current[i] || 0))
+            const rawOffset = time + (secOffsetsRef.current[i] || 0)
             const s = rawCtx.createBufferSource()
             s.buffer = ab
             s.playbackRate.value = speedRef.current
             s.connect(dest)
-            s.start(when, secTime)
+            if (rawOffset < 0) {
+              s.start(when - rawOffset, 0)
+            } else {
+              s.start(when, rawOffset)
+            }
             secSourcesRef.current.push(s)
           })
         }

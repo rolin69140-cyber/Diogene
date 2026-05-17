@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/index'
+import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS, generateUUID } from '../store/index'
 import useLibrary from '../hooks/useLibrary'
 import { saveBgImage, deleteBgImage, loadBgImage } from '../lib/bgImageStore'
 import { exportFullZip, importFullZip } from '../lib/fullBackup'
-import { saveDirectorPin } from '../lib/firebaseSync'
+import { saveDirectorPin, saveDirectorCodes, subscribeActivityLog } from '../lib/firebaseSync'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe', 'cuivres']
 const THEMES = [{ v: 'auto', l: 'Auto' }, { v: 'clair', l: 'Clair' }, { v: 'sombre', l: 'Sombre' }]
@@ -15,10 +15,56 @@ export default function Parametres() {
   const updateSettings = useStore((s) => s.updateSettings)
   const exportConfig   = useStore((s) => s.exportConfig)
   const importConfig   = useStore((s) => s.importConfig)
+  const adminUnlocked  = useStore((s) => s.adminUnlocked)
+  const directorCodes  = useStore((s) => s.directorCodes)
   const { exportToFile, importFromFile } = useLibrary()
 
   const [saved, setSaved] = useState(false)
   const timerRef = useRef(null)
+
+  // ── Section codes nominatifs (admin) ────────────────────────────────────
+  const [newCodeName, setNewCodeName]           = useState('')
+  const [justGeneratedCode, setJustGeneratedCode] = useState(null) // { name, pin }
+  const [codeCopied, setCodeCopied]             = useState(false)
+  const [activityLog, setActivityLog]           = useState([])
+
+  useEffect(() => {
+    const unsub = subscribeActivityLog(setActivityLog)
+    return () => unsub?.()
+  }, [])
+
+  const handleGenerateCode = useCallback(async () => {
+    const name = newCodeName.trim()
+    if (!name) return
+    const pin = String(Math.floor(100000 + Math.random() * 900000))
+    const newCode = {
+      id:             generateUUID(),
+      name,
+      pin,
+      active:         true,
+      isTemp:         true,
+      createdAt:      new Date().toISOString(),
+      lastLoginAt:    null,
+      lastLoginIsTemp: null,
+    }
+    const updated = [...directorCodes, newCode]
+    await saveDirectorCodes(updated)
+    setJustGeneratedCode({ name, pin })
+    setNewCodeName('')
+  }, [newCodeName, directorCodes])
+
+  const handleDisableCode = useCallback(async (codeId) => {
+    const updated = directorCodes.map((c) =>
+      c.id === codeId ? { ...c, active: false } : c
+    )
+    await saveDirectorCodes(updated)
+  }, [directorCodes])
+
+  const handleCopyCode = useCallback((pin) => {
+    navigator.clipboard?.writeText(pin)
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 2000)
+  }, [])
 
   // ── Sauvegarde complète ZIP ─────────────────────────────────────────────
   const [zipProgress, setZipProgress] = useState(null) // null | string
@@ -372,7 +418,6 @@ export default function Parametres() {
                 onClick={() => {
                   const generated = Math.random().toString(36).slice(2, 8).toUpperCase()
                   setPinNew(generated)
-                  setPinConfirm(generated)
                   setPinSection(pinConfigured ? 'change' : 'set')
                   setPinVisible(true)
                   setPinError('')
@@ -408,7 +453,7 @@ export default function Parametres() {
                       autoFocus
                       type={pinVisible ? 'text' : 'password'}
                       value={pinNew}
-                      onChange={(e) => { setPinNew(e.target.value); setPinConfirm(e.target.value); setPinError('') }}
+                      onChange={(e) => { setPinNew(e.target.value); setPinError('') }}
                       placeholder="Nouveau code"
                       className="flex-1 px-3 py-2 text-sm font-mono tracking-widest rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none"
                     />
@@ -458,6 +503,155 @@ export default function Parametres() {
           )}
         </div>
       </section>
+
+      {/* Codes nominatifs chefs de chœur — visible admin uniquement */}
+      {adminUnlocked && (
+        <section className="mb-6">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            🎼 Codes nominatifs — chefs de chœur
+          </h2>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-indigo-100 dark:border-indigo-900 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+
+            {/* Liste des codes */}
+            {directorCodes.length === 0 ? (
+              <p className="text-xs text-gray-400 px-4 py-4 italic">
+                Aucun code nominatif créé. Les accès utilisent encore le code unique ci-dessus.
+              </p>
+            ) : (
+              directorCodes.map((code) => {
+                const isTemp    = code.isTemp && !code.lastLoginAt
+                const hasLogged = !!code.lastLoginAt
+                const loginDate = code.lastLoginAt
+                  ? new Date(code.lastLoginAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                  : null
+
+                return (
+                  <div key={code.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                          {code.name}
+                        </span>
+                        {!code.active ? (
+                          <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">
+                            Désactivé
+                          </span>
+                        ) : isTemp ? (
+                          <span className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full">
+                            ⏳ Provisoire
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
+                            ✓ Actif
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {hasLogged
+                          ? `Dernière connexion : ${loginDate}${code.lastLoginIsTemp ? ' (code provisoire)' : ''}`
+                          : 'Jamais connecté'}
+                      </p>
+                    </div>
+                    {code.active && (
+                      <button
+                        onClick={() => handleDisableCode(code.id)}
+                        className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                        title="Désactiver ce code"
+                      >
+                        Désactiver
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+
+            {/* Formulaire nouveau code */}
+            <div className="px-4 py-4 bg-indigo-50/50 dark:bg-indigo-950/20">
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-2">
+                Nouveau code nominatif
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCodeName}
+                  onChange={(e) => setNewCodeName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGenerateCode()}
+                  placeholder="Prénom (ex : Marie)"
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900 focus:outline-none focus:border-indigo-400"
+                />
+                <button
+                  onClick={handleGenerateCode}
+                  disabled={!newCodeName.trim()}
+                  className="px-3 py-2 bg-indigo-600 disabled:opacity-40 text-white text-sm rounded-lg font-medium flex-shrink-0"
+                >
+                  Générer
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                Un code provisoire à 6 chiffres est généré. La personne pourra le personnaliser.
+              </p>
+            </div>
+
+            {/* Code juste généré */}
+            {justGeneratedCode && (
+              <div className="px-4 py-4 bg-green-50 dark:bg-green-950/30">
+                <p className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">
+                  ✓ Code créé pour {justGeneratedCode.name}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-2xl tracking-widest text-green-800 dark:text-green-200 flex-1">
+                    {justGeneratedCode.pin}
+                  </span>
+                  <button
+                    onClick={() => handleCopyCode(justGeneratedCode.pin)}
+                    className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-medium flex-shrink-0"
+                  >
+                    {codeCopied ? '✓ Copié' : '📋 Copier'}
+                  </button>
+                  <button
+                    onClick={() => setJustGeneratedCode(null)}
+                    className="text-green-400 text-lg px-1 flex-shrink-0"
+                  >
+                    ×
+                  </button>
+                </div>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+                  Communiquez ce code à {justGeneratedCode.name}. Il ne sera plus affiché.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Journal d'activité */}
+          {activityLog.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                Journal d'activité
+              </h3>
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+                {activityLog.slice(0, 15).map((entry, i) => {
+                  const date = new Date(entry.at).toLocaleDateString('fr-FR', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })
+                  return (
+                    <div key={i} className="flex items-start gap-2 px-4 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-gray-800 dark:text-gray-200 font-medium">{entry.who} </span>
+                        <span className="text-sm text-gray-500">{entry.action}</span>
+                        {entry.target && (
+                          <span className="text-sm text-gray-400"> · {entry.target}</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{date}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Données */}
       <section className="mb-6">

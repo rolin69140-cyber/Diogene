@@ -82,6 +82,27 @@ export function subscribeActivityLog(callback) {
   })
 }
 
+/**
+ * Enregistre la dernière connexion d'un code nominatif.
+ * Met à jour lastLoginAt et lastLoginIsTemp dans le tableau directorCodes.
+ */
+export async function recordDirectorLogin(codeId, wasTemp) {
+  if (!FIREBASE_ENABLED || !db) return
+  try {
+    const snap = await getDoc(doc(db, 'config', 'app'))
+    if (!snap.exists()) return
+    const codes = snap.data().directorCodes || []
+    const updated = codes.map((c) =>
+      c.id === codeId
+        ? { ...c, lastLoginAt: new Date().toISOString(), lastLoginIsTemp: !!wasTemp }
+        : c
+    )
+    await setDoc(doc(db, 'config', 'app'), { directorCodes: updated }, { merge: true })
+  } catch (e) {
+    console.warn('[DirectorCodes] recordDirectorLogin échec:', e.message)
+  }
+}
+
 // ─── Firestore : bibliothèque ─────────────────────────────────────────────────
 
 /**
