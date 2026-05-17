@@ -15,6 +15,7 @@ import useDirectorNotes from '../hooks/useDirectorNotes'
 export default function DirectorNotesModal({ songId, onClose }) {
   const songs            = useStore((s) => s.songs)
   const directorPin      = useStore((s) => s.settings.directorPin)
+  const directorCodes    = useStore((s) => s.directorCodes)
   const directorUnlocked = useStore((s) => s.directorUnlocked)
   const unlockDirector   = useStore((s) => s.unlockDirector)
   const lockDirector     = useStore((s) => s.lockDirector)
@@ -123,7 +124,8 @@ export default function DirectorNotesModal({ songId, onClose }) {
 
   if (!song) return null
 
-  const pinConfigured = !!directorPin
+  // pinConfigured : vrai si PIN legacy défini OU si système nominatif actif
+  const pinConfigured = !!directorPin || directorCodes.length > 0
   const hasContent    = text.trim().length > 0
 
   return (

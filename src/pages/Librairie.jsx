@@ -1140,10 +1140,11 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
   const activeConcertSetId  = useStore((s) => s.activeConcertSetId)
   const directorUnlocked    = useStore((s) => s.directorUnlocked)
   const directorPin         = useStore((s) => s.settings.directorPin)
+  const directorCodes       = useStore((s) => s.directorCodes)
   const deviceId            = useStore((s) => s.settings.deviceId)
   const unlockDirector      = useStore((s) => s.unlockDirector)
 
-  const pinConfigured = !!directorPin
+  const pinConfigured = !!directorPin || directorCodes.length > 0
   const isOwner = !set.creatorDeviceId || set.creatorDeviceId === deviceId
   const isActive = activeConcertSetId === set.id
 

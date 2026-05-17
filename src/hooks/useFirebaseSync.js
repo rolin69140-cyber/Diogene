@@ -95,24 +95,48 @@ export default function useFirebaseSync() {
 
     unsubConfig.current = subscribeAppConfig((cfg) => {
       setAppConfig(cfg)
-      // Sync du PIN directeur vers le store local (partagé via Firebase pour tous les appareils)
+
+      const { unlockedCodeVersion } = useStore.getState().settings
+
+      // ── Nouveau système : codes nominatifs ────────────────────────────────
+      const codes = Array.isArray(cfg.directorCodes) ? cfg.directorCodes : []
+      if (codes.length > 0) {
+        useStore.getState().setDirectorCodes(codes)
+
+        if (!unlockedCodeVersion) {
+          // Pas de mémorisation → ne rien faire
+        } else {
+          try {
+            const { pin, name } = JSON.parse(unlockedCodeVersion)
+            const still = codes.find((c) => c.active && c.pin === pin && c.name === name)
+            if (still) {
+              // Code toujours actif → restaurer l'accès silencieusement
+              useStore.setState({ directorUnlocked: true, unlockedAs: name })
+            } else {
+              // Code révoqué ou désactivé → révoquer
+              useStore.setState({ directorUnlocked: false, unlockedAs: null })
+              updateSettings({ unlockedCodeVersion: null })
+            }
+          } catch {
+            // unlockedCodeVersion est une ancienne string (format legacy) → effacer
+            updateSettings({ unlockedCodeVersion: null })
+          }
+        }
+        return  // ne pas tomber dans la logique legacy ci-dessous
+      }
+
+      // ── Système legacy : directorPin string ───────────────────────────────
+      // Comportement identique à l'existant — inchangé
       if (typeof cfg.directorPin === 'string') {
         updateSettings({ directorPin: cfg.directorPin })
 
-        // ── Auto-revoke / auto-restore ──────────────────────────────────────
-        // On compare le code Firebase avec la version mémorisée sur l'appareil.
-        const { unlockedCodeVersion } = useStore.getState().settings
-        const storedVersion = unlockedCodeVersion
-
-        if (!storedVersion) {
+        if (!unlockedCodeVersion) {
           // Pas de mémorisation → ne rien faire (accès non accordé)
         } else {
           const expectedVersion = cfg.directorPin || '__no_pin__'
-          if (storedVersion === expectedVersion) {
-            // Code inchangé → restaurer l'accès silencieusement
+          if (unlockedCodeVersion === expectedVersion) {
             useStore.setState({ directorUnlocked: true })
           } else {
-            // Code changé → révoquer l'accès et effacer la mémorisation
             useStore.setState({ directorUnlocked: false })
             updateSettings({ unlockedCodeVersion: null })
           }

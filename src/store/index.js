@@ -662,17 +662,37 @@ const useStore = create(
       })),
 
       // ── Mode chef de chœur ────────────────────────────────────────────────────
-      // directorUnlocked : non persisté (session), mais restauré au démarrage si
-      // unlockedCodeVersion === directorPin (voir useFirebaseSync).
+      // directorUnlocked : non persisté (session), restauré au démarrage via useFirebaseSync.
+      // directorCodes    : source de vérité Firebase, non persisté localement.
+      // unlockedAs       : nom de la personne déverrouillée (session uniquement, non persisté).
       directorUnlocked: false,
+      directorCodes: [],       // [] = système legacy (directorPin string)
+      unlockedAs: null,        // null = legacy ou non déverrouillé
+
+      setDirectorCodes: (codes) => set({ directorCodes: codes }),
 
       unlockDirector: (pin) => {
-        const stored = get().settings.directorPin
-        // Si aucun PIN défini, accès libre ; sinon on vérifie
+        const { directorCodes, settings } = get()
+
+        // ── Nouveau système nominatif ──────────────────────────────────────────
+        if (directorCodes.length > 0) {
+          const match = directorCodes.find((c) => c.active && c.pin === pin)
+          if (match) {
+            set({ directorUnlocked: true, unlockedAs: match.name })
+            // Mémoriser en JSON pour restauration au prochain démarrage
+            get().updateSettings({
+              unlockedCodeVersion: JSON.stringify({ pin: match.pin, name: match.name })
+            })
+            return true
+          }
+          return false
+        }
+
+        // ── Système legacy (directorPin string) ───────────────────────────────
+        // Rétrocompatibilité : comportement identique à l'existant
+        const stored = settings.directorPin
         if (!stored || pin === stored) {
-          set({ directorUnlocked: true })
-          // Mémoriser le code sur l'appareil → sera restauré au prochain démarrage
-          // tant que le code Firebase n'a pas changé
+          set({ directorUnlocked: true, unlockedAs: null })
           get().updateSettings({ unlockedCodeVersion: stored || '__no_pin__' })
           return true
         }
@@ -680,8 +700,7 @@ const useStore = create(
       },
 
       lockDirector: () => {
-        set({ directorUnlocked: false })
-        // Effacer la mémorisation → ne pas restaurer au prochain démarrage
+        set({ directorUnlocked: false, unlockedAs: null })
         get().updateSettings({ unlockedCodeVersion: null })
       },
 

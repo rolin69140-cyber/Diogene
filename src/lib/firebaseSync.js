@@ -45,6 +45,43 @@ export async function saveDirectorPin(pin) {
   await setDoc(doc(db, 'config', 'app'), { directorPin: pin }, { merge: true })
 }
 
+/**
+ * Sauvegarde le tableau complet des codes nominatifs dans config/app.
+ * Lecture préalable + réécriture pour éviter les conflits de concurrence.
+ */
+export async function saveDirectorCodes(codes) {
+  if (!FIREBASE_ENABLED || !db) return
+  await setDoc(doc(db, 'config', 'app'), { directorCodes: codes }, { merge: true })
+}
+
+/**
+ * Enregistre une entrée dans le log d'activité des chefs (config/activityLog).
+ * Limité aux 50 entrées les plus récentes.
+ */
+export async function logDirectorActivity({ who, action, target }) {
+  if (!FIREBASE_ENABLED || !db) return
+  try {
+    const ref = doc(db, 'config', 'activityLog')
+    const snap = await getDoc(ref)
+    const existing = snap.exists() ? (snap.data().entries || []) : []
+    const newEntry = { who, action, target, at: new Date().toISOString() }
+    const updated = [newEntry, ...existing].slice(0, 50)
+    await setDoc(ref, { entries: updated })
+  } catch (e) {
+    console.warn('[DirectorLog] logDirectorActivity échec:', e.message)
+  }
+}
+
+/**
+ * Écoute en temps réel le log d'activité des chefs.
+ */
+export function subscribeActivityLog(callback) {
+  if (!FIREBASE_ENABLED || !db) return () => {}
+  return onSnapshot(doc(db, 'config', 'activityLog'), (snap) => {
+    callback(snap.exists() ? (snap.data().entries || []) : [])
+  })
+}
+
 // ─── Firestore : bibliothèque ─────────────────────────────────────────────────
 
 /**
