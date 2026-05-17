@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore from '../store/index'
 import useDirectorNotes from '../hooks/useDirectorNotes'
+import { logDirectorActivity } from '../lib/firebaseSync'
 
 /**
  * Fenêtre "Chef de chœur" par chant.
@@ -19,6 +20,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
   const directorUnlocked = useStore((s) => s.directorUnlocked)
   const unlockDirector   = useStore((s) => s.unlockDirector)
   const lockDirector     = useStore((s) => s.lockDirector)
+  const unlockedAs       = useStore((s) => s.unlockedAs)
 
   const song = songs.find((s) => s.id === songId)
 
@@ -33,8 +35,9 @@ export default function DirectorNotesModal({ songId, onClose }) {
   const [showUnlockForm, setShowUnlockForm] = useState(false)
   const [saveStatus, setSaveStatus]   = useState('idle') // 'idle' | 'saving' | 'saved' | 'error'
 
-  const timerRef    = useRef(null)
+  const timerRef     = useRef(null)
   const savedTextRef = useRef('')
+  const hasEditedRef = useRef(false)
 
   // Initialise le texte à partir de Firestore (ou store local en fallback)
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
   const handleChange = useCallback((e) => {
     const val = e.target.value
     setText(val)
+    hasEditedRef.current = true
     setSaveStatus('idle')
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
@@ -62,8 +66,6 @@ export default function DirectorNotesModal({ songId, onClose }) {
         const ok = await saveNotes(val)
         setSaveStatus(ok ? 'saved' : 'error')
       } else {
-        // Fallback local via store
-        // updateSong n'est pas disponible ici directement — on passe par le store
         import('../store/index').then(({ default: useStore }) => {
           useStore.getState().updateSong(songId, { directorNotes: val })
         })
@@ -74,7 +76,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
     }, 800)
   }, [firebaseEnabled, saveNotes, songId])
 
-  // Sauvegarde immédiate à la fermeture si modifications en cours
+  // Sauvegarde immédiate à la fermeture si modifications en cours + log activité
   const handleClose = useCallback(() => {
     clearTimeout(timerRef.current)
     if (text !== savedTextRef.current) {
@@ -86,8 +88,11 @@ export default function DirectorNotesModal({ songId, onClose }) {
         })
       }
     }
+    if (hasEditedRef.current && unlockedAs) {
+      logDirectorActivity({ who: unlockedAs, action: 'a modifié les notes', target: song?.name })
+    }
     onClose()
-  }, [text, firebaseEnabled, saveNotes, songId, onClose])
+  }, [text, firebaseEnabled, saveNotes, songId, unlockedAs, song, onClose])
 
   const handleUnlock = useCallback(() => {
     const ok = unlockDirector(pinInput)
