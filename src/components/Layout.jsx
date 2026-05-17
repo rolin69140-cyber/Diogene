@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import useStore from '../store/index'
 import useFirebaseSync from '../hooks/useFirebaseSync'
 import { exportFullZip } from '../lib/fullBackup'
+import ChangeCodeModal from './ChangeCodeModal'
 
 const NAV_ITEMS = [
   { to: '/',            label: 'Accueil',    icon: '🏠' },
@@ -41,6 +42,7 @@ export default function Layout({ children }) {
       return () => clearTimeout(t)
     }
   }, [isDirector]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const [backupProgress, setBackupProgress] = useState(null)
 
@@ -153,6 +155,8 @@ export default function Layout({ children }) {
       <main className="flex-1 min-h-0 overflow-hidden flex flex-col md:pb-0 md:ml-16 pb-nav-safe">
         {children}
       </main>
+
+      <ChangeCodeModal />
 
       {/* Bottom nav mobile */}
       <nav

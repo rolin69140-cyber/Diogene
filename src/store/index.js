@@ -668,8 +668,10 @@ const useStore = create(
       directorUnlocked: false,
       directorCodes: [],       // [] = système legacy (directorPin string)
       unlockedAs: null,        // null = legacy ou non déverrouillé
+      lastUnlockInfo: null,    // { codeId, name, isTemp } — effacé après traitement
 
       setDirectorCodes: (codes) => set({ directorCodes: codes }),
+      clearLastUnlockInfo: () => set({ lastUnlockInfo: null }),
 
       unlockDirector: (pin) => {
         const { directorCodes, settings } = get()
@@ -678,8 +680,11 @@ const useStore = create(
         if (directorCodes.length > 0) {
           const match = directorCodes.find((c) => c.active && c.pin === pin)
           if (match) {
-            set({ directorUnlocked: true, unlockedAs: match.name })
-            // Mémoriser en JSON pour restauration au prochain démarrage
+            set({
+              directorUnlocked: true,
+              unlockedAs: match.name,
+              lastUnlockInfo: { codeId: match.id, name: match.name, isTemp: !!match.isTemp },
+            })
             get().updateSettings({
               unlockedCodeVersion: JSON.stringify({ pin: match.pin, name: match.name })
             })
@@ -689,10 +694,9 @@ const useStore = create(
         }
 
         // ── Système legacy (directorPin string) ───────────────────────────────
-        // Rétrocompatibilité : comportement identique à l'existant
         const stored = settings.directorPin
         if (!stored || pin === stored) {
-          set({ directorUnlocked: true, unlockedAs: null })
+          set({ directorUnlocked: true, unlockedAs: null, lastUnlockInfo: null })
           get().updateSettings({ unlockedCodeVersion: stored || '__no_pin__' })
           return true
         }
@@ -700,7 +704,7 @@ const useStore = create(
       },
 
       lockDirector: () => {
-        set({ directorUnlocked: false, unlockedAs: null })
+        set({ directorUnlocked: false, unlockedAs: null, lastUnlockInfo: null })
         get().updateSettings({ unlockedCodeVersion: null })
       },
 
