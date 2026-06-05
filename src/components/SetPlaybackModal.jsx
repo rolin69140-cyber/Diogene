@@ -44,14 +44,17 @@ function areVocalComplements(btnA, btnB) {
 }
 
 // Trouve la meilleure piste pour un morceau selon un pupitre
+// Règle : jamais sélectionner un instrumental par défaut — uniquement à la demande explicite
 function bestButtonForPupitre(song, pupitre) {
   const btns = song.audioButtons || []
   if (!btns.length) return null
-  const exact = btns.find((b) => b.pupitres?.includes(pupitre))
+  const vocal = btns.filter((b) => !isInstrumental(b))
+  if (!vocal.length) return null  // que des instruments → rien par défaut
+  const exact = vocal.find((b) => b.pupitres?.includes(pupitre))
   if (exact) return exact
-  const tutti = btns.find((b) => !b.pupitres?.length || b.pupitres.length >= 4)
+  const tutti = vocal.find((b) => !b.pupitres?.length || b.pupitres.length >= 4)
   if (tutti) return tutti
-  return btns[0]
+  return vocal[0]
 }
 
 // Couleur d'un bouton audio (selon son pupitre associé)
