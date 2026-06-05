@@ -81,10 +81,12 @@ export default function Metronome({ defaultBpm, songId, compact = false }) {
   useEffect(() => {
     if (!flashRef.current) return
     if (!settings.metronomeVisuel || !isRunning) {
+      flashRef.current.style.transition = 'none'
       flashRef.current.style.opacity = '0'
       return
     }
-    const isAccent = beat % 1000 === 0 && beat < 1000 ? true : beat === 0
+    const isAccent = beat === 0
+    flashRef.current.style.transition = 'opacity 80ms ease-out'
     flashRef.current.style.opacity = isAccent ? '0.45' : '0.25'
     flashRef.current.style.backgroundColor = isAccent ? '#f97316' : '#3b82f6'
     const t = setTimeout(() => {
@@ -97,10 +99,12 @@ export default function Metronome({ defaultBpm, songId, compact = false }) {
   useEffect(() => {
     if (!bordureRef.current) return
     if (!settings.metronomeVisuelBordures || !isRunning) {
+      bordureRef.current.style.transition = 'none'
       bordureRef.current.style.opacity = '0'
       return
     }
     const isAccent = beat === 0
+    bordureRef.current.style.transition = 'opacity 100ms ease-out'
     bordureRef.current.style.opacity = '1'
     bordureRef.current.style.borderColor = isAccent ? '#f97316' : '#3b82f6'
     bordureRef.current.style.borderWidth = isAccent ? '6px' : '4px'

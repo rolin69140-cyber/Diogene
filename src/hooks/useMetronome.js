@@ -50,8 +50,7 @@ export default function useMetronome() {
     clearInterval(intervalRef.current)
     intervalRef.current = null
     setIsRunning(false)
-    // On incrémente beat vers une valeur sentinelle pour signaler l'arrêt aux useEffect visuels
-    setBeat((b) => b + 1000)
+    setBeat(0)
     beatRef.current = 0
   }, [])
 
