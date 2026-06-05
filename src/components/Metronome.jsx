@@ -10,7 +10,8 @@ export default function Metronome({ defaultBpm, compact = false }) {
   const [inputVal, setInputVal] = useState(String(defaultBpm || 80))
   const [collapsed, setCollapsed] = useState(compact)
   const { isRunning, beat, start, stop, updateBpm } = useMetronome()
-  const flashRef = useRef(null)
+  const flashRef   = useRef(null)
+  const bordureRef = useRef(null)
 
   // BPM mémorisé pour ce chant — ne se réinitialise pas si on arrête/relance
   // Ne se met à jour que si le chant change (defaultBpm change) ET le métronome est arrêté
@@ -69,21 +70,50 @@ export default function Metronome({ defaultBpm, compact = false }) {
   useEffect(() => {
     if (!settings.metronomeVisuel || !isRunning || !flashRef.current) return
     const isAccent = beat === 0
-    flashRef.current.style.opacity = isAccent ? '0.18' : '0.10'
-    flashRef.current.style.backgroundColor = isAccent ? '#f97316' : '#3b82f6' // orange / bleu
+    flashRef.current.style.opacity = isAccent ? '0.45' : '0.25'
+    flashRef.current.style.backgroundColor = isAccent ? '#f97316' : '#3b82f6'
     const t = setTimeout(() => {
       if (flashRef.current) flashRef.current.style.opacity = '0'
-    }, isAccent ? 120 : 80)
+    }, isAccent ? 140 : 90)
     return () => clearTimeout(t)
   }, [beat, isRunning, settings.metronomeVisuel])
 
+  // Bordures périphériques sur le beat
+  useEffect(() => {
+    if (!settings.metronomeVisuelBordures || !isRunning || !bordureRef.current) return
+    const isAccent = beat === 0
+    bordureRef.current.style.opacity = '1'
+    bordureRef.current.style.borderColor = isAccent ? '#f97316' : '#3b82f6'
+    bordureRef.current.style.borderWidth = isAccent ? '6px' : '4px'
+    const t = setTimeout(() => {
+      if (bordureRef.current) bordureRef.current.style.opacity = '0'
+    }, isAccent ? 160 : 100)
+    return () => clearTimeout(t)
+  }, [beat, isRunning, settings.metronomeVisuelBordures])
+
   return (
     <>
-      {/* Flash plein écran — positionné en fixed derrière tout */}
+      {/* Flash plein écran */}
       {settings.metronomeVisuel && (
         <div
           ref={flashRef}
-          style={{ opacity: 0, transition: 'opacity 60ms ease-out', backgroundColor: '#3b82f6' }}
+          style={{ opacity: 0, transition: 'opacity 80ms ease-out', backgroundColor: '#3b82f6' }}
+          className="fixed inset-0 pointer-events-none z-30"
+        />
+      )}
+
+      {/* Bordures périphériques */}
+      {settings.metronomeVisuelBordures && (
+        <div
+          ref={bordureRef}
+          style={{
+            opacity: 0,
+            transition: 'opacity 100ms ease-out',
+            borderStyle: 'solid',
+            borderColor: '#3b82f6',
+            borderWidth: '4px',
+            borderRadius: '0px',
+          }}
           className="fixed inset-0 pointer-events-none z-30"
         />
       )}

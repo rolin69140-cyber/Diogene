@@ -646,7 +646,8 @@ const useStore = create(
         volume: 0.8,
         metronomeSound: 'clic',      // clic | bois | bip
         metronomeSonore: true,
-        metronomeVisuel: true,
+        metronomeVisuel: true,       // flash plein écran (legacy)
+        metronomeVisuelBordures: false, // bordures périphériques
         theme: 'auto',               // clair | sombre | auto
         buttonSize: 'normal',        // normal | grand | tres-grand
         modeScene: false,

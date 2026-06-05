@@ -298,8 +298,11 @@ export default function Parametres() {
           <Row label="Sonore">
             <Toggle value={settings.metronomeSonore} onChange={(v) => save({ metronomeSonore: v })} />
           </Row>
-          <Row label="Flash visuel">
+          <Row label="Flash plein écran">
             <Toggle value={settings.metronomeVisuel} onChange={(v) => save({ metronomeVisuel: v })} />
+          </Row>
+          <Row label="Bordures périphériques">
+            <Toggle value={settings.metronomeVisuelBordures ?? false} onChange={(v) => save({ metronomeVisuelBordures: v })} />
           </Row>
         </div>
       </section>
