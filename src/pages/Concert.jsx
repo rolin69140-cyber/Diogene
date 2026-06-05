@@ -214,7 +214,7 @@ export default function Concert() {
 
       {/* Métronome */}
       <ErrorBoundary>
-        <Metronome defaultBpm={currentSong?.bpm} />
+        <Metronome defaultBpm={currentSong?.bpm} songId={currentSong?.id} />
       </ErrorBoundary>
 
       {/* ── Panneau BAST (identique à Répétition) ── */}

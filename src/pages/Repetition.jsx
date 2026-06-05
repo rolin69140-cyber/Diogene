@@ -207,7 +207,7 @@ export default function Repetition() {
 
       {/* Métronome */}
       <ErrorBoundary>
-        <Metronome defaultBpm={activeSong?.bpm} />
+        <Metronome defaultBpm={activeSong?.bpm} songId={activeSong?.id} />
       </ErrorBoundary>
 
       {/* 4 boutons B/A/S/T + 5e voix optionnelle */}

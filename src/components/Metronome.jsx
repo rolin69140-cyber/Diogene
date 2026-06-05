@@ -2,38 +2,39 @@ import { useState, useEffect, useRef } from 'react'
 import useMetronome from '../hooks/useMetronome'
 import useStore from '../store/index'
 
-export default function Metronome({ defaultBpm, compact = false }) {
-  const settings = useStore((s) => s.settings)
+export default function Metronome({ defaultBpm, songId, compact = false }) {
+  const settings      = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
-  const [bpm, setBpm] = useState(defaultBpm || 80)
+  const updateSong    = useStore((s) => s.updateSong)
+
+  const [bpm, setBpm]         = useState(defaultBpm || 80)
   const [editing, setEditing] = useState(false)
   const [inputVal, setInputVal] = useState(String(defaultBpm || 80))
   const [collapsed, setCollapsed] = useState(compact)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
+
   const { isRunning, beat, start, stop, updateBpm } = useMetronome()
   const flashRef   = useRef(null)
   const bordureRef = useRef(null)
 
-  // BPM mémorisé pour ce chant — ne se réinitialise pas si on arrête/relance
-  // Ne se met à jour que si le chant change (defaultBpm change) ET le métronome est arrêté
-  const lockedBpmRef = useRef(defaultBpm || 80) // BPM verrouillé dès le premier lancement
-  const hasStartedRef = useRef(false)            // a-t-on déjà lancé pour ce chant ?
+  const lockedBpmRef  = useRef(defaultBpm || 80)
+  const hasStartedRef = useRef(false)
 
   useEffect(() => {
-    // Nouveau chant → réinitialiser
     if (defaultBpm) {
       setBpm(defaultBpm)
       setInputVal(String(defaultBpm))
       lockedBpmRef.current = defaultBpm
       hasStartedRef.current = false
+      setShowSavePrompt(false)
       if (isRunning) stop()
     }
-  }, [defaultBpm])
+  }, [defaultBpm]) // eslint-disable-line
 
   const handleToggle = async () => {
     if (isRunning) {
       stop()
     } else {
-      // Relancer avec le BPM tel qu'il était au moment du dernier arrêt
       const bpmToUse = hasStartedRef.current ? bpm : (defaultBpm || bpm)
       hasStartedRef.current = true
       await start({
@@ -64,6 +65,17 @@ export default function Metronome({ defaultBpm, compact = false }) {
     setBpm(n)
     setInputVal(String(n))
     if (isRunning) updateBpm(n)
+    // Proposer la sauvegarde seulement si un chant est actif et que le BPM diffère du BPM enregistré
+    if (songId && n !== (defaultBpm || 0)) {
+      setShowSavePrompt(true)
+    } else {
+      setShowSavePrompt(false)
+    }
+  }
+
+  const handleSaveBpm = () => {
+    if (songId) updateSong(songId, { bpm })
+    setShowSavePrompt(false)
   }
 
   // Flash plein écran sur le beat
@@ -112,7 +124,6 @@ export default function Metronome({ defaultBpm, compact = false }) {
             borderStyle: 'solid',
             borderColor: '#3b82f6',
             borderWidth: '4px',
-            borderRadius: '0px',
           }}
           className="fixed inset-0 pointer-events-none z-30"
         />
@@ -183,6 +194,29 @@ export default function Metronome({ defaultBpm, compact = false }) {
             {isRunning ? '⏹' : '▶'}
           </button>
         </div>
+
+        {/* Invite de sauvegarde du tempo */}
+        {showSavePrompt && songId && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200 dark:border-amber-800">
+            <span className="text-xs text-amber-700 dark:text-amber-300">
+              Sauvegarder {bpm} BPM pour ce chant ?
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveBpm}
+                className="text-xs font-medium px-2.5 py-1 bg-amber-600 text-white rounded-lg"
+              >
+                Oui
+              </button>
+              <button
+                onClick={() => setShowSavePrompt(false)}
+                className="text-xs px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg"
+              >
+                Non
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
