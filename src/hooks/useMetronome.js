@@ -50,19 +50,20 @@ export default function useMetronome() {
     clearInterval(intervalRef.current)
     intervalRef.current = null
     setIsRunning(false)
-    setBeat(0)
+    // On incrémente beat vers une valeur sentinelle pour signaler l'arrêt aux useEffect visuels
+    setBeat((b) => b + 1000)
     beatRef.current = 0
   }, [])
 
-  const start = useCallback(({ bpm = 80, sound = 'clic', sonore = true, visuel = true, timeSignature = 4 }) => {
+  const start = useCallback(({ bpm = 80, sound = 'clic', sonore = true, timeSignature = 4 }) => {
     clearInterval(intervalRef.current)
     beatRef.current = 0
-    paramsRef.current = { bpm, sound, sonore, visuel, timeSignature }
+    paramsRef.current = { bpm, sound, sonore, timeSignature }
 
     const interval = (60 / bpm) * 1000
 
     intervalRef.current = setInterval(() => {
-      const { sound, sonore, visuel, timeSignature } = paramsRef.current
+      const { sound, sonore, timeSignature } = paramsRef.current
       const currentBeat = beatRef.current
       const isAccent = currentBeat === 0
 
@@ -73,9 +74,8 @@ export default function useMetronome() {
         } catch (e) {}
       }
 
-      if (visuel) {
-        setBeat(currentBeat)
-      }
+      // Toujours propager le beat (visuel géré côté Metronome.jsx selon settings)
+      setBeat(currentBeat)
 
       beatRef.current = (currentBeat + 1) % timeSignature
     }, interval)
@@ -86,18 +86,16 @@ export default function useMetronome() {
   const updateBpm = useCallback((bpm) => {
     if (!intervalRef.current) return
     paramsRef.current = { ...paramsRef.current, bpm }
-    // Redémarrer avec le nouveau BPM
     clearInterval(intervalRef.current)
     const interval = (60 / bpm) * 1000
-    const { sound, sonore, visuel, timeSignature } = paramsRef.current
     intervalRef.current = setInterval(() => {
-      const { sound, sonore, visuel, timeSignature } = paramsRef.current
+      const { sound, sonore, timeSignature } = paramsRef.current
       const currentBeat = beatRef.current
       const isAccent = currentBeat === 0
       if (sonore) {
         try { const ctx = getCtx(); makeClick(ctx, isAccent, sound) } catch (e) {}
       }
-      if (visuel) setBeat(currentBeat)
+      setBeat(currentBeat)
       beatRef.current = (currentBeat + 1) % timeSignature
     }, interval)
   }, [])
