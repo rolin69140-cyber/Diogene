@@ -124,8 +124,9 @@ export default function Repetition() {
     }
   }
 
-  // V1, V2, V3… avec pupitres:[] sont des voix tutti, pas des instruments
-  const isVocalTutti = (btn) => /^V\d+$/i.test(btn.label?.trim() ?? '')
+  // Instrumental = pupitres:[] + label correspond à un nom d'instrument connu
+  const INSTRUMENT_LABELS = /^(guit|guitar|piano|orgue|organ|acc|accomp|basse|bass|clavier|keyboard|synth|harm|harmo|cordes|cuivres|perc|batterie|drums|flute|violon|cello|contrebasse)$/i
+  const isInstrumental = (btn) => Array.isArray(btn.pupitres) && btn.pupitres.length === 0 && INSTRUMENT_LABELS.test(btn.label?.trim() ?? '')
 
   const findBestButton = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return null
@@ -145,8 +146,8 @@ export default function Repetition() {
       if (score > bestScore) { bestScore = score; best = btn }
     }
     if (best) return best
-    // 3. Bouton vocal tutti (V1, V2…) en fallback avant les non-typés
-    const vocalTutti = activeSong.audioButtons.find((b) => Array.isArray(b.pupitres) && b.pupitres.length === 0 && isVocalTutti(b))
+    // 3. Voix sans pupitre (Voix 1, Voix 2…) en fallback — exclut les instruments
+    const vocalTutti = activeSong.audioButtons.find((b) => Array.isArray(b.pupitres) && b.pupitres.length === 0 && !isInstrumental(b))
     if (vocalTutti) return vocalTutti
     // 4. Bouton non-typé (pupitres undefined) en dernier recours
     return activeSong.audioButtons.find((b) => !Array.isArray(b.pupitres)) || null

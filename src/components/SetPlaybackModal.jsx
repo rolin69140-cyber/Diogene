@@ -18,11 +18,12 @@ const PUPITRE_COLORS = { B: '#185FA5', A: '#534AB7', S: '#D85A30', T: '#3B6D11' 
 const ALL_PUPITRES   = Object.keys(PUPITRE_COLORS)   // ['B','A','S','T']
 const GAP_SECONDS = 5
 
-// Un bouton est "instrumental" s'il n'est associé à aucun pupitre vocal (GUIT, Piano…)
-// Exception : les labels V1, V2, V3… sont des voix même si pupitres:[]
+// Un bouton est "instrumental" si son label correspond à un nom d'instrument connu.
+// Tout bouton avec pupitres:[] dont le label NE correspond PAS à un instrument est une voix.
+const INSTRUMENT_LABELS = /^(guit|guitar|piano|orgue|organ|acc|accomp|basse|bass|clavier|keyboard|synth|harm|harmo|cordes|cuivres|perc|batterie|drums|flute|violon|cello|contrebasse)$/i
 function isInstrumental(btn) {
   if (!Array.isArray(btn.pupitres) || btn.pupitres.length !== 0) return false
-  return !/^V\d+$/i.test(btn.label?.trim() ?? '')
+  return INSTRUMENT_LABELS.test(btn.label?.trim() ?? '')
 }
 
 // Un bouton est "Tutti" s'il couvre toutes les voix vocales
