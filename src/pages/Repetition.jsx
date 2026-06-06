@@ -124,6 +124,9 @@ export default function Repetition() {
     }
   }
 
+  // V1, V2, V3… avec pupitres:[] sont des voix tutti, pas des instruments
+  const isVocalTutti = (btn) => /^V\d+$/i.test(btn.label?.trim() ?? '')
+
   const findBestButton = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return null
     const sel = new Set(selected)
@@ -141,8 +144,12 @@ export default function Repetition() {
       const score = overlap * 10 - (btn.pupitres.length - overlap)
       if (score > bestScore) { bestScore = score; best = btn }
     }
-    // 3. Bouton non-typé (pupitres undefined) en dernier recours — exclut les instrumentaux (pupitres:[])
-    return best || activeSong.audioButtons.find((b) => !Array.isArray(b.pupitres)) || null
+    if (best) return best
+    // 3. Bouton vocal tutti (V1, V2…) en fallback avant les non-typés
+    const vocalTutti = activeSong.audioButtons.find((b) => Array.isArray(b.pupitres) && b.pupitres.length === 0 && isVocalTutti(b))
+    if (vocalTutti) return vocalTutti
+    // 4. Bouton non-typé (pupitres undefined) en dernier recours
+    return activeSong.audioButtons.find((b) => !Array.isArray(b.pupitres)) || null
   }
 
   // Retourne un tableau de boutons pour la lecture multi-pistes (voix uniquement).

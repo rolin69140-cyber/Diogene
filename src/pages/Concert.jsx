@@ -116,28 +116,33 @@ export default function Concert() {
     }
   }
 
+  // V1, V2, V3… avec pupitres:[] sont des voix tutti, pas des instruments
+  const isVocalTutti = (btn) => /^V\d+$/i.test(btn.label?.trim() ?? '')
+
   const findBestButton = (selected) => {
     if (!currentSong?.audioButtons?.length || !selected.length) return null
     const sel = new Set(selected)
-    const ep = (btn) => btn.pupitres?.length > 0 ? btn.pupitres : ['B', 'A', 'S', 'T']
     // 1. Exact match avec pupitres explicites (prioritaire)
     const exactExplicit = currentSong.audioButtons.find(
       (b) => b.pupitres?.length > 0 && b.pupitres.length === sel.size && b.pupitres.every((x) => sel.has(x))
     )
     if (exactExplicit) return exactExplicit
-    // 2. Bouton non-typé (pupitres undefined) en dernier recours — exclut les instrumentaux (pupitres:[])
-    const exactAny = currentSong.audioButtons.find((b) => !Array.isArray(b.pupitres))
-    // 3. Meilleur score sur pupitres explicites
+    // 2. Meilleur score sur pupitres explicites
     let best = null, bestScore = -Infinity
     for (const btn of currentSong.audioButtons) {
-      if (!btn.pupitres?.length) continue // on ignore les non-typés dans le scoring
+      if (!btn.pupitres?.length) continue
       const p = btn.pupitres
       const overlap = p.filter((x) => sel.has(x)).length
       if (!overlap) continue
       const score = overlap * 10 - (p.length - overlap)
       if (score > bestScore) { bestScore = score; best = btn }
     }
-    return best || exactAny || null
+    if (best) return best
+    // 3. Bouton vocal tutti (V1, V2…) en fallback avant les non-typés
+    const vocalTutti = currentSong.audioButtons.find((b) => Array.isArray(b.pupitres) && b.pupitres.length === 0 && isVocalTutti(b))
+    if (vocalTutti) return vocalTutti
+    // 4. Bouton non-typé (pupitres undefined) en dernier recours
+    return currentSong.audioButtons.find((b) => !Array.isArray(b.pupitres)) || null
   }
 
   // Retourne un tableau de boutons pour la lecture multi-pistes (voix uniquement).
