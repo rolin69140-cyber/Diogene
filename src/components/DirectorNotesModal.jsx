@@ -246,7 +246,10 @@ export default function DirectorNotesModal({ songId, onClose }) {
             /* Mode lecture */
             <div className="px-5 py-4">
               {hasContent ? (
-                <NotesEditor value={displayText} readOnly />
+                <div
+                  className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ __html: displayText }}
+                />
               ) : (
                 <p className="text-sm text-gray-400 dark:text-gray-600 italic text-center py-8">
                   Aucune note du chef de chœur pour ce chant.
