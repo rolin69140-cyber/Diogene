@@ -30,8 +30,13 @@ export default function NotesEditor({ value = '', onChange, placeholder = '', re
     if (value !== prevValue.current) {
       prevValue.current = value
       const el = editorRef.current
-      if (el && document.activeElement !== el) {
+      if (el) {
+        // Sauvegarder/restaurer la sélection pour ne pas perturber la frappe en cours
+        const sel = window.getSelection()
         el.innerHTML = value
+        if (sel && sel.rangeCount > 0) {
+          try { sel.removeAllRanges() } catch {}
+        }
       }
     }
   }, [value])
