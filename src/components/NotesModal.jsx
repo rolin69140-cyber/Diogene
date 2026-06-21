@@ -8,6 +8,7 @@ import useStore from '../store/index'
 export default function NotesModal({ songId, onClose }) {
   const songs      = useStore((s) => s.songs)
   const updateSong = useStore((s) => s.updateSong)
+  const setHideNav = useStore((s) => s.setHideNav)
 
   const song  = songs.find((s) => s.id === songId)
   const [text, setText] = useState(song?.notes || '')
@@ -48,6 +49,11 @@ export default function NotesModal({ songId, onClose }) {
   }, [handleClose])
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
+
+  useEffect(() => {
+    setHideNav(true)
+    return () => setHideNav(false)
+  }, [setHideNav])
 
   if (!song) return null
 
