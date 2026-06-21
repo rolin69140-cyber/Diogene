@@ -176,7 +176,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
   const displayText   = firebaseEnabled ? remoteNotes : text
   const hasContent    = displayText.trim().length > 0
   const isReady       = !firebaseEnabled || synced
-  console.log('[Modal] remoteNotes:', JSON.stringify(remoteNotes), '| synced:', synced, '| isReady:', isReady, '| hasContent:', hasContent, '| song:', song?.name)
+  console.log('[Modal] remoteNotes:', JSON.stringify(remoteNotes), '| synced:', synced, '| isReady:', isReady, '| hasContent:', hasContent, '| directorUnlocked:', directorUnlocked, '| song:', song?.name)
 
   return (
     <div
