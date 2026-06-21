@@ -70,12 +70,11 @@ export default function NotesEditor({ value = '', onChange, placeholder = '', re
     if (!sel || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
     if (range.collapsed) {
-      // Rien de sélectionné : on change la taille du bloc courant
-      exec('fontSize', size === 'small' ? '1' : size === 'large' ? '5' : '3')
+      exec('fontSize', size === 'normal' ? '3' : size === 'moyen' ? '4' : '5')
       return
     }
     // Remplace la sélection par un span stylé
-    const sizeMap = { small: '0.8em', normal: '1em', large: '1.4em' }
+    const sizeMap = { normal: '1em', moyen: '1.25em', large: '1.6em' }
     const span = document.createElement('span')
     span.style.fontSize = sizeMap[size]
     range.surroundContents(span)
@@ -108,20 +107,20 @@ export default function NotesEditor({ value = '', onChange, placeholder = '', re
 
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setFontSize('small') }}
-          className="px-2 py-1 rounded text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform select-none"
-          title="Petit"
-        >A</button>
-        <button
-          type="button"
           onMouseDown={(e) => { e.preventDefault(); setFontSize('normal') }}
           className="px-2 py-1 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform select-none"
           title="Normal"
         >A</button>
         <button
           type="button"
+          onMouseDown={(e) => { e.preventDefault(); setFontSize('moyen') }}
+          className="px-2 py-1 rounded text-base text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform select-none font-medium"
+          title="Moyen"
+        >A</button>
+        <button
+          type="button"
           onMouseDown={(e) => { e.preventDefault(); setFontSize('large') }}
-          className="px-2 py-1 rounded text-lg text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform select-none font-medium"
+          className="px-2 py-1 rounded text-xl text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform select-none font-medium"
           title="Grand"
         >A</button>
       </div>
