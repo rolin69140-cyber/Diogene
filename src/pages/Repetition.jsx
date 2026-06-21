@@ -329,9 +329,7 @@ export default function Repetition() {
               className="text-left w-full px-3 py-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 active:opacity-70 transition-opacity"
             >
               <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-0.5">✏️ Notes</p>
-              <p className="text-xs text-amber-800 dark:text-amber-200 line-clamp-2 leading-relaxed whitespace-pre-wrap">
-                {activeSong.notes}
-              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-200 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: activeSong.notes }} />
             </button>
           )}
           {directorNotesText?.trim() && (
@@ -340,9 +338,7 @@ export default function Repetition() {
               className="text-left w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 active:opacity-70 transition-opacity"
             >
               <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-0.5">🎼 Chef de chœur</p>
-              <p className="text-xs text-indigo-800 dark:text-indigo-200 line-clamp-2 leading-relaxed whitespace-pre-wrap">
-                {directorNotesText}
-              </p>
+              <p className="text-xs text-indigo-800 dark:text-indigo-200 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: directorNotesText }} />
             </button>
           )}
         </div>
