@@ -172,7 +172,8 @@ export default function DirectorNotesModal({ songId, onClose }) {
 
   // pinConfigured : vrai si PIN legacy défini OU si système nominatif actif
   const pinConfigured = !!directorPin || directorCodes.length > 0
-  const hasContent    = text.trim().length > 0
+  const hasContent    = text.replace(/<[^>]*>/g, '').trim().length > 0 || text.trim().length > 0
+  console.log('[DirectorNotesModal] text:', JSON.stringify(text), '| hasContent:', hasContent, '| loading:', loading)
 
   return (
     <div
