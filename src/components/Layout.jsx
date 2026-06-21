@@ -17,6 +17,7 @@ const NAV_ITEMS = [
 
 export default function Layout({ children }) {
   const modeScene       = useStore((s) => s.settings.modeScene)
+  const hideNav         = useStore((s) => s.hideNav)
   const theme           = useStore((s) => s.settings.theme)
   const lastBackupDate      = useStore((s) => s.settings.lastBackupDate)
   const libraryModifiedAt   = useStore((s) => s.settings.libraryModifiedAt)
@@ -156,7 +157,7 @@ export default function Layout({ children }) {
 
       {/* Bottom nav mobile */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden"
+        className={`fixed bottom-0 left-0 right-0 z-50 flex md:hidden${hideNav ? ' hidden' : ''}`}
         style={{
           backgroundColor: theme === 'sombre' ? 'rgba(17,24,39,0.93)' : 'rgba(255,255,255,0.93)',
           backdropFilter: 'blur(20px)',

@@ -684,6 +684,8 @@ const useStore = create(
 
       configLoaded: false,     // true dès que Firebase a répondu au moins une fois
       setConfigLoaded: () => set({ configLoaded: true }),
+      hideNav: false,
+      setHideNav: (v) => set({ hideNav: v }),
       setDirectorPin: (pin) => set({ directorPin: pin }),
       setDirectorCodes: (codes) => set({ directorCodes: codes }),
       clearLastUnlockInfo: () => set({ lastUnlockInfo: null }),

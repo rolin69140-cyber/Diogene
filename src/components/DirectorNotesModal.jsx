@@ -14,6 +14,7 @@ import { logDirectorActivity, saveResetRequest, subscribeResetRequests, deleteRe
  *     • Fonctionne en local uniquement (notes stockées sur l'appareil)
  */
 export default function DirectorNotesModal({ songId, onClose }) {
+  const setHideNav       = useStore((s) => s.setHideNav)
   const songs            = useStore((s) => s.songs)
   const directorPin      = useStore((s) => s.directorPin)
   const configLoaded     = useStore((s) => s.configLoaded)
@@ -161,6 +162,11 @@ export default function DirectorNotesModal({ songId, onClose }) {
   }, [handleClose])
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
+
+  useEffect(() => {
+    setHideNav(true)
+    return () => setHideNav(false)
+  }, [setHideNav])
 
   if (!song) return null
 
