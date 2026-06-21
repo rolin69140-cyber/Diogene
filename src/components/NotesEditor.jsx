@@ -24,20 +24,17 @@ export default function NotesEditor({ value = '', onChange, placeholder = '', re
     }
   }, []) // eslint-disable-line — intentionnellement uniquement au montage
 
-  // Mise à jour si value change depuis l'extérieur (ex. sync Firebase)
+  // Mise à jour si value change depuis l'extérieur (ex. sync Firebase initiale)
+  // On ne met à jour que si l'élément n'a pas le focus (évite reset curseur pendant frappe)
   const prevValue = useRef(value)
   useEffect(() => {
     if (value !== prevValue.current) {
       prevValue.current = value
       const el = editorRef.current
-      if (el) {
-        // Sauvegarder/restaurer la sélection pour ne pas perturber la frappe en cours
-        const sel = window.getSelection()
-        el.innerHTML = value
-        if (sel && sel.rangeCount > 0) {
-          try { sel.removeAllRanges() } catch {}
-        }
-      }
+      if (!el) return
+      // Si l'élément a le focus et que son contenu actuel correspond à ce qu'on tape, ne pas écraser
+      if (document.activeElement === el && el.innerHTML !== '') return
+      el.innerHTML = value
     }
   }, [value])
 
