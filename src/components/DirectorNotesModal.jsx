@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore from '../store/index'
 import useDirectorNotes from '../hooks/useDirectorNotes'
 import { logDirectorActivity, saveResetRequest, subscribeResetRequests, deleteResetRequest } from '../lib/firebaseSync'
+import NotesEditor from './NotesEditor'
 
 /**
  * Fenêtre "Chef de chœur" par chant.
@@ -90,8 +91,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
   }, [remoteNotes, loading, firebaseEnabled]) // eslint-disable-line
 
   // Auto-save avec debounce 800 ms
-  const handleChange = useCallback((e) => {
-    const val = e.target.value
+  const handleChange = useCallback((val) => {
     setText(val)
     hasEditedRef.current = true
     setSaveStatus('idle')
@@ -232,21 +232,17 @@ export default function DirectorNotesModal({ songId, onClose }) {
             </div>
           ) : directorUnlocked ? (
             /* Mode édition */
-            <textarea
-              autoFocus
+            <NotesEditor
               value={text}
               onChange={handleChange}
-              placeholder={`Instructions pour « ${song.name} »…\n\nEx : travailler la diction mesures 12–16, baisser les basses au refrain, tempo ♩=80…`}
-              className="w-full resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed"
-              style={{ minHeight: '300px' }}
+              placeholder={`Instructions pour « ${song.name} »…`}
+              autoFocus
             />
           ) : (
             /* Mode lecture */
             <div className="px-5 py-4">
               {hasContent ? (
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                  {text}
-                </p>
+                <NotesEditor value={text} readOnly />
               ) : (
                 <p className="text-sm text-gray-400 dark:text-gray-600 italic text-center py-8">
                   Aucune note du chef de chœur pour ce chant.

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore from '../store/index'
+import NotesEditor from './NotesEditor'
 
 /**
  * Fenêtre de prise de notes par chant.
@@ -22,13 +23,12 @@ export default function NotesModal({ songId, onClose }) {
   }, [songId]) // eslint-disable-line
 
   // Auto-save 600 ms après la dernière frappe
-  const handleChange = useCallback((e) => {
-    const val = e.target.value
-    setText(val)
+  const handleChange = useCallback((html) => {
+    setText(html)
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      updateSong(songId, { notes: val })
-      savedRef.current = val
+      updateSong(songId, { notes: html })
+      savedRef.current = html
     }, 600)
   }, [songId, updateSong])
 
@@ -87,18 +87,17 @@ export default function NotesModal({ songId, onClose }) {
         </div>
 
         {/* Zone de texte */}
-        <textarea
-          autoFocus
+        <NotesEditor
           value={text}
           onChange={handleChange}
-          placeholder={`Notes pour « ${song.name} »…\n\nEx : retravailler la montée des sopranos, tempo plus lent au refrain…`}
-          className="flex-1 resize-none px-5 py-4 text-sm text-gray-800 dark:text-gray-200 bg-transparent placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none leading-relaxed overflow-y-auto"
+          placeholder={`Notes pour « ${song.name} »…`}
+          autoFocus
         />
 
         {/* Pied : indicateur de sauvegarde */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-800">
           <span className="text-xs text-gray-300 dark:text-gray-600">
-            {text.length > 0 ? `${text.length} caractère${text.length > 1 ? 's' : ''}` : 'Aucune note'}
+            {text.replace(/<[^>]*>/g, '').length > 0 ? '' : 'Aucune note'}
           </span>
           <button
             onClick={handleClose}
