@@ -40,9 +40,13 @@ export default function useFirebaseSync() {
     // entièrement le settings initial. Les utilisateurs existants n'ont pas deviceId.
     // On le génère ici au premier démarrage après mise à jour.
     // ✅ iOS Safari ✅ Android Chrome : generateUUID() avec fallback (voir store/index.js)
-    const { deviceId } = useStore.getState().settings
+    const { deviceId, directorPin: legacyPin } = useStore.getState().settings
     if (!deviceId) {
       updateSettings({ deviceId: generateUUID() })
+    }
+    // Nettoyer directorPin s'il traîne encore dans les settings persistés (ancienne version)
+    if (legacyPin !== undefined) {
+      updateSettings({ directorPin: undefined })
     }
 
     if (!FB) {
@@ -99,6 +103,15 @@ export default function useFirebaseSync() {
 
       const { unlockedCodeVersion } = useStore.getState().settings
 
+      // ── directorPin toujours synchronisé en top-level (non-persisté) ────
+      // Converti en string pour normaliser (Firestore stocke parfois un nombre si saisi sans guillemets).
+      const rawPin = cfg.directorPin
+      if (rawPin != null && rawPin !== '') {
+        useStore.getState().setDirectorPin(String(rawPin))
+      }
+      // Marquer la config comme chargée (débloque les formulaires de déverrouillage)
+      useStore.getState().setConfigLoaded()
+
       // ── Nouveau système : codes nominatifs ────────────────────────────────
       const codes = Array.isArray(cfg.directorCodes) ? cfg.directorCodes : []
       if (codes.length > 0) {
@@ -107,40 +120,47 @@ export default function useFirebaseSync() {
         if (!unlockedCodeVersion) {
           // Pas de mémorisation → ne rien faire
         } else {
-          try {
-            const { pin, name } = JSON.parse(unlockedCodeVersion)
-            const still = codes.find((c) => c.active && c.pin === pin && c.name === name)
-            if (still) {
-              // Code toujours actif → restaurer l'accès silencieusement
-              useStore.setState({ directorUnlocked: true, unlockedAs: name })
-            } else {
-              // Code révoqué ou désactivé → révoquer
-              useStore.setState({ directorUnlocked: false, unlockedAs: null })
-              updateSettings({ unlockedCodeVersion: null })
+          // Vérifier d'abord si c'est une session super admin (comparaison en string)
+          const superPin = rawPin != null ? String(rawPin) : ''
+          if (superPin && unlockedCodeVersion === superPin) {
+            useStore.setState({ directorUnlocked: true, unlockedAs: null, adminUnlocked: true })
+          } else {
+            try {
+              const { pin, name } = JSON.parse(unlockedCodeVersion)
+              const still = codes.find((c) => c.active && c.pin === pin && c.name === name)
+              if (still) {
+                // Code toujours actif → restaurer l'accès silencieusement
+                useStore.setState({ directorUnlocked: true, unlockedAs: name })
+              } else {
+                // Code révoqué ou désactivé → révoquer
+                useStore.setState({ directorUnlocked: false, unlockedAs: null })
+                updateSettings({ unlockedCodeVersion: null })
+              }
+            } catch {
+              // unlockedCodeVersion n'est pas un JSON de code nominatif.
+              // Ne PAS effacer : c'est peut-être un PIN super admin mémorisé
+              // (rawPin était absent de ce snapshot Firebase mais sera présent au prochain).
             }
-          } catch {
-            // unlockedCodeVersion est une ancienne string (format legacy) → effacer
-            updateSettings({ unlockedCodeVersion: null })
           }
         }
         return  // ne pas tomber dans la logique legacy ci-dessous
       }
 
-      // ── Système legacy : directorPin string ───────────────────────────────
-      // Comportement identique à l'existant — inchangé
-      if (typeof cfg.directorPin === 'string') {
-        updateSettings({ directorPin: cfg.directorPin })
-
+      // ── Système legacy : directorPin string (sans codes nominatifs) ───────
+      if (rawPin != null) {
+        const pinStr = String(rawPin)
         if (!unlockedCodeVersion) {
           // Pas de mémorisation → ne rien faire (accès non accordé)
         } else {
-          const expectedVersion = cfg.directorPin || '__no_pin__'
+          const expectedVersion = pinStr || '__no_pin__'
           if (unlockedCodeVersion === expectedVersion) {
             useStore.setState({ directorUnlocked: true })
-          } else {
+          } else if (pinStr) {
+            // PIN configuré mais mémorisation différente → révoquer
             useStore.setState({ directorUnlocked: false })
             updateSettings({ unlockedCodeVersion: null })
           }
+          // Si pinStr est vide (rawPin absent), ne pas révoquer — Firebase pas encore chargé
         }
       }
     })

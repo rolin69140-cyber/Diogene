@@ -3,7 +3,7 @@ import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS, generateUUID } from
 import useLibrary from '../hooks/useLibrary'
 import { saveBgImage, deleteBgImage, loadBgImage } from '../lib/bgImageStore'
 import { exportFullZip, importFullZip } from '../lib/fullBackup'
-import { saveDirectorPin, saveDirectorCodes, subscribeActivityLog } from '../lib/firebaseSync'
+import { saveDirectorPin, saveDirectorCodes, subscribeActivityLog, subscribeResetRequests, approveResetRequest, deleteResetRequest } from '../lib/firebaseSync'
 
 const INSTRUMENTS = ['piano', 'orgue', 'choeur', 'cordes', 'harpe', 'cuivres']
 const THEMES = [{ v: 'auto', l: 'Auto' }, { v: 'clair', l: 'Clair' }, { v: 'sombre', l: 'Sombre' }]
@@ -15,8 +15,12 @@ export default function Parametres() {
   const updateSettings = useStore((s) => s.updateSettings)
   const exportConfig   = useStore((s) => s.exportConfig)
   const importConfig   = useStore((s) => s.importConfig)
-  const adminUnlocked  = useStore((s) => s.adminUnlocked)
-  const directorCodes  = useStore((s) => s.directorCodes)
+  const adminUnlocked    = useStore((s) => s.adminUnlocked)
+  const directorUnlocked = useStore((s) => s.directorUnlocked)
+  const directorPin      = useStore((s) => s.directorPin)
+  const unlockedAs       = useStore((s) => s.unlockedAs)
+  const lastUnlockInfo   = useStore((s) => s.lastUnlockInfo)
+  const directorCodes    = useStore((s) => s.directorCodes)
   const { exportToFile, importFromFile } = useLibrary()
 
   const [saved, setSaved] = useState(false)
@@ -27,10 +31,25 @@ export default function Parametres() {
   const [justGeneratedCode, setJustGeneratedCode] = useState(null) // { name, pin }
   const [codeCopied, setCodeCopied]             = useState(false)
   const [activityLog, setActivityLog]           = useState([])
+  const [resetRequests, setResetRequests]       = useState([])
 
   useEffect(() => {
     const unsub = subscribeActivityLog(setActivityLog)
     return () => unsub?.()
+  }, [])
+
+  useEffect(() => {
+    if (!adminUnlocked) return
+    const unsub = subscribeResetRequests(setResetRequests)
+    return () => unsub?.()
+  }, [adminUnlocked])
+
+  const handleApproveReset = useCallback(async (requestId, name) => {
+    await approveResetRequest(requestId, name)
+  }, [])
+
+  const handleRefuseReset = useCallback(async (requestId) => {
+    await deleteResetRequest(requestId)
   }, [])
 
   const handleGenerateCode = useCallback(async () => {
@@ -126,6 +145,29 @@ export default function Parametres() {
     setBgVersion((v) => v + 1)
   }
 
+  // ── Changement de code (chef de chœur connecté) ────────────────────────
+  const [changeCodeNew,     setChangeCodeNew]     = useState('')
+  const [changeCodeConfirm, setChangeCodeConfirm] = useState('')
+  const [changeCodeError,   setChangeCodeError]   = useState('')
+  const [changeCodeSuccess, setChangeCodeSuccess] = useState(false)
+
+  const handleChangeOwnCode = useCallback(async () => {
+    const trimmed = changeCodeNew.trim()
+    if (!trimmed) { setChangeCodeError('Le code ne peut pas être vide.'); return }
+    if (trimmed !== changeCodeConfirm.trim()) { setChangeCodeError('Les codes ne correspondent pas.'); return }
+    const codeId = lastUnlockInfo?.codeId
+    if (!codeId) { setChangeCodeError('Session expirée, reconnectez-vous.'); return }
+    const updated = directorCodes.map((c) =>
+      c.id === codeId ? { ...c, pin: trimmed, isTemp: false } : c
+    )
+    await saveDirectorCodes(updated)
+    setChangeCodeNew('')
+    setChangeCodeConfirm('')
+    setChangeCodeError('')
+    setChangeCodeSuccess(true)
+    setTimeout(() => setChangeCodeSuccess(false), 3000)
+  }, [changeCodeNew, changeCodeConfirm, lastUnlockInfo, directorCodes])
+
   // ── État section PIN directeur ──────────────────────────────────────────
   const [pinSection, setPinSection]   = useState('idle') // 'idle' | 'set' | 'change' | 'delete'
   const [pinNew, setPinNew]     = useState('')
@@ -133,7 +175,7 @@ export default function Parametres() {
   const [pinVisible, setPinVisible]   = useState(false)
   const [pinSuccess, setPinSuccess]   = useState(false)
 
-  const pinConfigured = !!settings.directorPin
+  const pinConfigured = !!directorPin
 
   const resetPinForm = useCallback(() => {
     setPinNew('')
@@ -143,14 +185,12 @@ export default function Parametres() {
 
   const handleSavePin = useCallback(() => {
     if (pinSection === 'delete') {
-      save({ directorPin: '' })
-      saveDirectorPin('')
+      saveDirectorPin('')  // Firebase → subscription mettra à jour directorPin
       resetPinForm()
       return
     }
     if (!pinNew.trim()) { setPinError('Le code ne peut pas être vide.'); return }
-    save({ directorPin: pinNew.trim() })
-    saveDirectorPin(pinNew.trim())
+    saveDirectorPin(pinNew.trim())  // Firebase → subscription mettra à jour directorPin
     setPinVisible(true)
     resetPinForm()
   }, [pinSection, pinNew, resetPinForm])
@@ -384,14 +424,14 @@ export default function Parametres() {
                 <p className="text-xs text-indigo-500 dark:text-indigo-400 font-medium mb-1">Code actuel</p>
                 <div className="flex items-center gap-2">
                   <span className="flex-1 font-mono text-lg tracking-widest text-indigo-800 dark:text-indigo-200">
-                    {pinVisible ? settings.directorPin : '••••••'}
+                    {pinVisible ? directorPin : '••••••'}
                   </span>
                   <button onClick={() => setPinVisible((v) => !v)}
                     className="text-indigo-400 text-sm px-2 py-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900">
                     {pinVisible ? '🙈' : '👁'}
                   </button>
                   <button
-                    onClick={() => { navigator.clipboard?.writeText(settings.directorPin); setPinSuccess(true); setTimeout(() => setPinSuccess(false), 2000) }}
+                    onClick={() => { navigator.clipboard?.writeText(directorPin); setPinSuccess(true); setTimeout(() => setPinSuccess(false), 2000) }}
                     className="text-indigo-400 text-sm px-2 py-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900"
                   >
                     {pinSuccess ? '✓' : '📋'}
@@ -476,7 +516,7 @@ export default function Parametres() {
       )}
 
       {/* Bannière migration — ancien code encore actif + codes nominatifs créés */}
-      {adminUnlocked && directorCodes.length > 0 && pinConfigured && (
+      {adminUnlocked && directorCodes.length > 0 && !!directorPin && (
         <section className="mb-6">
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
@@ -488,11 +528,47 @@ export default function Parametres() {
               </p>
             </div>
             <button
-              onClick={() => { save({ directorPin: '' }); saveDirectorPin('') }}
+              onClick={() => saveDirectorPin('')}
               className="flex-shrink-0 px-3 py-2 bg-amber-600 text-white text-xs rounded-lg font-medium"
             >
               Désactiver
             </button>
+          </div>
+        </section>
+      )}
+
+      {/* Demandes de réinitialisation — visible super admin uniquement */}
+      {adminUnlocked && resetRequests.filter((r) => !r.newPin).length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">
+            🔔 Demandes en attente
+          </h2>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-red-200 dark:border-red-900 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+            {resetRequests.filter((r) => !r.newPin).map((r) => {
+              const date = new Date(r.requestedAt).toLocaleDateString('fr-FR', {
+                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+              })
+              return (
+                <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      <strong>{r.name}</strong> souhaite réinitialiser son code
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{date}</p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleApproveReset(r.id, r.name)}
+                      className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg"
+                    >✓ Valider</button>
+                    <button
+                      onClick={() => handleRefuseReset(r.id)}
+                      className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs rounded-lg"
+                    >✕ Refuser</button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </section>
       )}
@@ -643,6 +719,49 @@ export default function Parametres() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* Changer son propre code — visible uniquement chef de chœur connecté (pas super admin) */}
+      {directorUnlocked && !adminUnlocked && unlockedAs && (
+        <section className="mb-6">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            🔑 Mon code d'accès
+          </h2>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-indigo-100 dark:border-indigo-900 px-4 py-4 space-y-3">
+            <p className="text-xs text-gray-500">
+              Connecté en tant que <strong>{unlockedAs}</strong>. Vous pouvez modifier votre code à tout moment.
+            </p>
+            <div className="space-y-2">
+              <input
+                type="password"
+                value={changeCodeNew}
+                onChange={(e) => { setChangeCodeNew(e.target.value); setChangeCodeError('') }}
+                placeholder="Nouveau code"
+                className="w-full px-3 py-2 text-sm font-mono tracking-widest rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none"
+              />
+              <input
+                type="password"
+                value={changeCodeConfirm}
+                onChange={(e) => { setChangeCodeConfirm(e.target.value); setChangeCodeError('') }}
+                placeholder="Confirmer le nouveau code"
+                className="w-full px-3 py-2 text-sm font-mono tracking-widest rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none"
+              />
+              {changeCodeError && (
+                <p className="text-xs text-red-500">{changeCodeError}</p>
+              )}
+              {changeCodeSuccess && (
+                <p className="text-xs text-green-600 font-medium">✓ Code mis à jour</p>
+              )}
+              <button
+                onClick={handleChangeOwnCode}
+                disabled={!changeCodeNew.trim()}
+                className="w-full py-2 bg-indigo-600 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
+              >
+                Enregistrer le nouveau code
+              </button>
+            </div>
+          </div>
         </section>
       )}
 

@@ -13,8 +13,23 @@ window.addEventListener('unhandledrejection', (e) => {
 // (skipWaiting + clientsClaim activent le nouveau SW immédiatement,
 //  ce listener recharge la page pour que l'utilisateur voie la nouvelle version)
 if ('serviceWorker' in navigator) {
+  // Garde anti-boucle : le rechargement lui-même déclenche controllerchange
+  // si le SW vient de s'activer. On ignore le premier controllerchange qui
+  // suit un reload récent (sessionStorage flag, effacé à la fermeture de l'onglet).
+  let reloading = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return
+    reloading = true
     window.location.reload()
+  })
+
+  // Forcer la vérification de mise à jour au démarrage.
+  // Sans ça, iOS Safari PWA peut attendre jusqu'à 24h avant de vérifier.
+  // navigator.serviceWorker.ready est une Promise qui résout quand le SW est actif.
+  navigator.serviceWorker.ready.then((registration) => {
+    registration.update().catch(() => {
+      // Silencieux — hors-ligne ou requête bloquée, pas de problème
+    })
   })
 }
 import { createRoot } from 'react-dom/client'

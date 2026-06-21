@@ -41,7 +41,7 @@ async function resolveUrl(url) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function PdfViewer({ url, zoom = 1, className = '', label = '' }) {
+export default function PdfViewer({ url, zoom = 1, className = '', label = '', onRenderComplete }) {
   const containerRef   = useRef(null)
   const renderTasksRef = useRef([])
   const pdfDocRef      = useRef(null)
@@ -112,6 +112,9 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '' })
         if (cancelled) break
         await renderPage(pdf, pageNum, zoom, containerRef.current, renderTasksRef, cancelled)
       }
+      // Double RAF : attend que le browser ait peint les nouveaux canvases
+      // avant de signaler la fin du rendu (évite le flash lors du reset transform)
+      if (!cancelled) requestAnimationFrame(() => requestAnimationFrame(() => onRenderComplete?.()))
     })()
 
     return () => { cancelled = true }

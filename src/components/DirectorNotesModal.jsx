@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useStore from '../store/index'
 import useDirectorNotes from '../hooks/useDirectorNotes'
-import { logDirectorActivity } from '../lib/firebaseSync'
+import { logDirectorActivity, saveResetRequest, subscribeResetRequests, deleteResetRequest } from '../lib/firebaseSync'
 
 /**
  * Fenêtre "Chef de chœur" par chant.
@@ -15,9 +15,10 @@ import { logDirectorActivity } from '../lib/firebaseSync'
  */
 export default function DirectorNotesModal({ songId, onClose }) {
   const songs            = useStore((s) => s.songs)
-  const directorPin      = useStore((s) => s.settings.directorPin)
+  const directorPin      = useStore((s) => s.directorPin)
+  const configLoaded     = useStore((s) => s.configLoaded)
   const directorCodes    = useStore((s) => s.directorCodes)
-  const directorUnlocked = useStore((s) => s.directorUnlocked)
+  const directorUnlocked = useStore((s) => s.directorUnlocked || s.adminUnlocked)
   const unlockDirector   = useStore((s) => s.unlockDirector)
   const lockDirector     = useStore((s) => s.lockDirector)
   const unlockedAs       = useStore((s) => s.unlockedAs)
@@ -34,6 +35,40 @@ export default function DirectorNotesModal({ songId, onClose }) {
   const [showPin, setShowPin]         = useState(false)
   const [showUnlockForm, setShowUnlockForm] = useState(false)
   const [saveStatus, setSaveStatus]   = useState('idle') // 'idle' | 'saving' | 'saved' | 'error'
+
+  // ── Demande de réinitialisation de code ─────────────────────────────────
+  const [showResetForm, setShowResetForm]   = useState(false)
+  const [resetName, setResetName]           = useState('')
+  const [resetSent, setResetSent]           = useState(false)
+  const [resetRequests, setResetRequests]   = useState([])
+  const [approvedPin, setApprovedPin]       = useState(null) // code approuvé à afficher
+
+  // Écoute les demandes pour détecter l'approbation
+  useEffect(() => {
+    const unsub = subscribeResetRequests((reqs) => {
+      setResetRequests(reqs)
+      // Si une demande pour ce nom a été approuvée, afficher le code
+      if (resetName) {
+        const mine = reqs.find((r) => r.name === resetName && r.newPin)
+        if (mine) setApprovedPin({ pin: mine.newPin, requestId: mine.id })
+      }
+    })
+    return () => unsub?.()
+  }, [resetName])
+
+  const handleResetRequest = useCallback(async () => {
+    if (!resetName.trim()) return
+    await saveResetRequest(resetName.trim())
+    setResetSent(true)
+  }, [resetName])
+
+  const handleAcknowledgePin = useCallback(async (requestId) => {
+    await deleteResetRequest(requestId)
+    setApprovedPin(null)
+    setResetSent(false)
+    setShowResetForm(false)
+    setResetName('')
+  }, [])
 
   const timerRef     = useRef(null)
   const savedTextRef = useRef('')
@@ -224,30 +259,38 @@ export default function DirectorNotesModal({ songId, onClose }) {
                   </p>
                   {pinConfigured && (
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="relative flex-1">
-                        <input
-                          autoFocus
-                          type={showPin ? 'text' : 'password'}
-                          value={pinInput}
-                          onChange={(e) => { setPinInput(e.target.value); setPinError(false) }}
-                          onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-                          placeholder="Code d'accès…"
-                          className={`w-full px-3 py-2 rounded-lg text-sm font-mono border ${
-                            pinError
-                              ? 'border-red-400 bg-red-50 dark:bg-red-950/30'
-                              : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900'
-                          } focus:outline-none`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPin((v) => !v)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
-                        >{showPin ? '🙈' : '👁'}</button>
-                      </div>
-                      <button
-                        onClick={handleUnlock}
-                        className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium active:scale-95"
-                      >OK</button>
+                      {!configLoaded ? (
+                        <p className="text-xs text-indigo-400 animate-pulse py-2">
+                          ⟳ Connexion en cours…
+                        </p>
+                      ) : (
+                        <>
+                          <div className="relative flex-1">
+                            <input
+                              autoFocus
+                              type={showPin ? 'text' : 'password'}
+                              value={pinInput}
+                              onChange={(e) => { setPinInput(e.target.value); setPinError(false) }}
+                              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                              placeholder="Code d'accès…"
+                              className={`w-full px-3 py-2 rounded-lg text-sm font-mono border ${
+                                pinError
+                                  ? 'border-red-400 bg-red-50 dark:bg-red-950/30'
+                                  : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900'
+                              } focus:outline-none`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPin((v) => !v)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
+                            >{showPin ? '🙈' : '👁'}</button>
+                          </div>
+                          <button
+                            onClick={handleUnlock}
+                            className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium active:scale-95"
+                          >OK</button>
+                        </>
+                      )}
                     </div>
                   )}
                   {pinError && (
@@ -259,10 +302,91 @@ export default function DirectorNotesModal({ songId, onClose }) {
                       className="w-full py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium"
                     >Déverrouiller</button>
                   )}
-                  <button
-                    onClick={() => { setShowUnlockForm(false); setPinError(false) }}
-                    className="text-xs text-gray-400 mt-2 block"
-                  >Annuler</button>
+                  <div className="flex items-center justify-between mt-2">
+                    <button
+                      onClick={() => { setShowUnlockForm(false); setPinError(false) }}
+                      className="text-xs text-gray-400"
+                    >Annuler</button>
+                    {directorCodes.length > 0 && (
+                      <button
+                        onClick={() => { setShowUnlockForm(false); setShowResetForm(true) }}
+                        className="text-xs text-indigo-400 underline"
+                      >Code oublié ?</button>
+                    )}
+                  </div>
+                </div>
+              ) : showResetForm ? (
+                /* Formulaire demande de réinitialisation */
+                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4">
+                  {approvedPin ? (
+                    /* Code approuvé — à saisir puis personnaliser */
+                    <div>
+                      <p className="text-xs text-green-700 dark:text-green-400 font-medium mb-2">
+                        ✓ Votre demande a été approuvée !
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                        Votre nouveau code provisoire (à usage unique) :
+                      </p>
+                      <p className="font-mono text-2xl tracking-widest text-center text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-950/40 rounded-xl py-3 mb-3">
+                        {approvedPin.pin}
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Notez-le, puis connectez-vous avec ce code. Vous pourrez le personnaliser ensuite.
+                      </p>
+                      <button
+                        onClick={() => handleAcknowledgePin(approvedPin.requestId)}
+                        className="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg"
+                      >J'ai noté mon code</button>
+                    </div>
+                  ) : resetSent ? (
+                    /* Demande envoyée — en attente */
+                    <div>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">
+                        ⏳ Demande envoyée
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">
+                        L'administrateur va valider votre demande. Revenez ici pour voir votre nouveau code.
+                      </p>
+                      <button
+                        onClick={() => { setShowResetForm(false); setResetSent(false); setResetName('') }}
+                        className="text-xs text-gray-400"
+                      >Fermer</button>
+                    </div>
+                  ) : (
+                    /* Sélection du nom */
+                    <div>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-2">
+                        Réinitialisation de code
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Sélectionnez votre nom. L'administrateur recevra une demande de validation.
+                      </p>
+                      <div className="flex flex-col gap-2 mb-3">
+                        {directorCodes.filter((c) => c.active).map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => setResetName(c.name)}
+                            className={`px-3 py-2 rounded-lg text-sm text-left transition-colors ${
+                              resetName === c.name
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-800 text-gray-700 dark:text-gray-300'
+                            }`}
+                          >{c.name}</button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleResetRequest}
+                          disabled={!resetName}
+                          className="flex-1 py-2 bg-amber-600 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
+                        >Envoyer la demande</button>
+                        <button
+                          onClick={() => { setShowResetForm(false); setResetName('') }}
+                          className="px-3 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600"
+                        >Annuler</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <button

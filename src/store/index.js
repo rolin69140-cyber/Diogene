@@ -323,11 +323,11 @@ const useStore = create(
     (set, get) => ({
 
       // ── Undo stack (non persisté) ─────────────────────────────────────────
-      _undoStack: [], // max 10 snapshots { songs, label }
+      _undoStack: [], // max 10 snapshots { songs, sets, label }
 
       saveUndo: (label) => set((s) => ({
         _undoStack: [
-          { songs: s.songs, label },
+          { songs: s.songs, sets: s.sets, label },
           ...s._undoStack,
         ].slice(0, 10)
       })),
@@ -335,7 +335,7 @@ const useStore = create(
       undo: () => set((s) => {
         if (s._undoStack.length === 0) return {}
         const [top, ...rest] = s._undoStack
-        return { songs: top.songs, _undoStack: rest }
+        return { songs: top.songs, sets: top.sets ?? s.sets, _undoStack: rest }
       }),
 
       canUndo: () => get()._undoStack.length > 0,
@@ -402,14 +402,16 @@ const useStore = create(
         const newSong = { ...song, id: song.id || generateUUID() }
         set((s) => ({ songs: [...s.songs, newSong] }))
         fbSaveSong(toCloud(newSong)).catch((e) => console.warn('[Firebase] addSong sync:', e))
+        get().updateSettings({ libraryModifiedAt: new Date().toISOString() })
       },
 
       updateSong: (id, updates) => set((s) => {
         const newSongs = s.songs.map((song) => song.id === id ? { ...song, ...updates } : song)
         const updated = newSongs.find((song) => song.id === id)
-        // Ne pas sync si on met à jour uniquement les notes perso
-        if (updated && !('notes' in updates && Object.keys(updates).length === 1)) {
+        const notesOnly = 'notes' in updates && Object.keys(updates).length === 1
+        if (updated && !notesOnly) {
           fbSaveSong(toCloud(updated)).catch((e) => console.warn('[Firebase] updateSong sync:', e))
+          get().updateSettings({ libraryModifiedAt: new Date().toISOString() })
         }
         return { songs: newSongs }
       }),
@@ -445,15 +447,19 @@ const useStore = create(
         set((s) => ({ songs: s.songs.filter((song) => song.id !== id) }))
         // Note: fbDeleteSong est appelé dans useLibrary.deleteSongWithFiles
         // On ne l'appelle pas ici pour éviter les doubles suppressions
+        get().updateSettings({ libraryModifiedAt: new Date().toISOString() })
       },
 
-      addAudioButton: (songId, button) => set((s) => ({
-        songs: s.songs.map((song) =>
-          song.id === songId
-            ? { ...song, audioButtons: [...(song.audioButtons || []), { ...button, id: button.id || generateUUID() }] }
-            : song
-        )
-      })),
+      addAudioButton: (songId, button) => {
+        set((s) => ({
+          songs: s.songs.map((song) =>
+            song.id === songId
+              ? { ...song, audioButtons: [...(song.audioButtons || []), { ...button, id: button.id || generateUUID() }] }
+              : song
+          )
+        }))
+        get().updateSettings({ libraryModifiedAt: new Date().toISOString() })
+      },
 
       removeAudioButton: (songId, buttonId) => set((s) => {
         const newSongs = s.songs.map((song) =>
@@ -528,13 +534,16 @@ const useStore = create(
         return { songs: newSongs }
       }),
 
-      addPdfToSong: (songId, pdf) => set((s) => ({
-        songs: s.songs.map((song) =>
-          song.id === songId
-            ? { ...song, pdfFiles: [...(song.pdfFiles || []), { ...pdf, id: pdf.id || generateUUID() }] }
-            : song
-        )
-      })),
+      addPdfToSong: (songId, pdf) => {
+        set((s) => ({
+          songs: s.songs.map((song) =>
+            song.id === songId
+              ? { ...song, pdfFiles: [...(song.pdfFiles || []), { ...pdf, id: pdf.id || generateUUID() }] }
+              : song
+          )
+        }))
+        get().updateSettings({ libraryModifiedAt: new Date().toISOString() })
+      },
 
       removePdfFromSong: (songId, pdfId) => set((s) => {
         const newSongs = s.songs.map((song) =>
@@ -652,8 +661,9 @@ const useStore = create(
         buttonSize: 'normal',        // normal | grand | tres-grand
         modeScene: false,
         bgOpacity: 0.12,             // opacité du fond décoratif (0 = aucun, 1 = plein)
-        directorPin: '',             // PIN chef de chœur (vide = non protégé)
+        // directorPin retiré de settings — géré en top-level non-persisté (voir ci-dessous)
         lastBackupDate: null,        // ISO date de la dernière sauvegarde JSON
+        libraryModifiedAt: null,     // ISO date de la dernière modification de la bibliothèque
         deviceId: null,              // UUID appareil — généré au démarrage si absent (voir useFirebaseSync)
         unlockedCodeVersion: null,   // code mémorisé lors du dernier déverrouillage (persisté)
       },
@@ -667,17 +677,31 @@ const useStore = create(
       // directorCodes    : source de vérité Firebase, non persisté localement.
       // unlockedAs       : nom de la personne déverrouillée (session uniquement, non persisté).
       directorUnlocked: false,
-      directorCodes: [],       // [] = système legacy (directorPin string)
-      unlockedAs: null,        // null = legacy ou non déverrouillé
-      lastUnlockInfo: null,    // { codeId, name, isTemp } — effacé après traitement
+      directorPin: '',         // source de vérité Firebase — NON persisté, mis à jour par useFirebaseSync
+      directorCodes: [],
+      unlockedAs: null,
+      lastUnlockInfo: null,
 
+      configLoaded: false,     // true dès que Firebase a répondu au moins une fois
+      setConfigLoaded: () => set({ configLoaded: true }),
+      setDirectorPin: (pin) => set({ directorPin: pin }),
       setDirectorCodes: (codes) => set({ directorCodes: codes }),
       clearLastUnlockInfo: () => set({ lastUnlockInfo: null }),
 
       unlockDirector: (pin) => {
-        const { directorCodes, settings } = get()
+        const { directorCodes, directorPin } = get()
 
-        // ── Nouveau système nominatif ──────────────────────────────────────────
+        // ── Super admin : directorPin (Firebase) ou VITE_ADMIN_PIN (fallback) ──
+        const adminEnvPin = import.meta.env.VITE_ADMIN_PIN || ''
+        const superPin = directorPin || adminEnvPin
+        console.log('[unlockDirector] pin saisi:', JSON.stringify(pin), '| directorPin Firebase:', JSON.stringify(directorPin), '| VITE_ADMIN_PIN:', JSON.stringify(adminEnvPin), '| superPin effectif:', JSON.stringify(superPin))
+        if (superPin && pin === superPin) {
+          set({ directorUnlocked: true, unlockedAs: null, lastUnlockInfo: null, adminUnlocked: true })
+          get().updateSettings({ unlockedCodeVersion: pin })
+          return true
+        }
+
+        // ── Codes nominatifs ───────────────────────────────────────────────────
         if (directorCodes.length > 0) {
           const match = directorCodes.find((c) => c.active && c.pin === pin)
           if (match) {
@@ -694,18 +718,17 @@ const useStore = create(
           return false
         }
 
-        // ── Système legacy (directorPin string) ───────────────────────────────
-        const stored = settings.directorPin
-        if (!stored || pin === stored) {
+        // ── Système legacy sans directorPin (aucun code configuré) ────────────
+        if (!directorPin) {
           set({ directorUnlocked: true, unlockedAs: null, lastUnlockInfo: null })
-          get().updateSettings({ unlockedCodeVersion: stored || '__no_pin__' })
+          get().updateSettings({ unlockedCodeVersion: '__no_pin__' })
           return true
         }
         return false
       },
 
       lockDirector: () => {
-        set({ directorUnlocked: false, unlockedAs: null, lastUnlockInfo: null })
+        set({ directorUnlocked: false, unlockedAs: null, lastUnlockInfo: null, adminUnlocked: false })
         get().updateSettings({ unlockedCodeVersion: null })
       },
 
@@ -747,13 +770,17 @@ const useStore = create(
     {
       name: 'diogene-store',
       // On ne persiste pas playerState ni lyricsState (états UI transitoires)
-      partialize: (s) => ({
-        songs: s.songs,
-        sets: s.sets,
-        settings: s.settings,
-        activeSongId: s.activeSongId,
-        activeConcertSetId: s.activeConcertSetId,
-      }),
+      partialize: (s) => {
+        // Exclure directorPin des settings persistés — géré en top-level non-persisté via Firebase
+        const { directorPin: _dp, ...safeSettings } = s.settings
+        return {
+          songs: s.songs,
+          sets: s.sets,
+          settings: safeSettings,
+          activeSongId: s.activeSongId,
+          activeConcertSetId: s.activeConcertSetId,
+        }
+      },
     }
   )
 )

@@ -43,6 +43,17 @@ function getCtx() {
   return { ctx: _ctx, comp: _comp }
 }
 
+// Reprendre l'AudioContext automatiquement quand l'appli revient au premier plan
+// (iOS/Android suspendent le contexte audio en arrière-plan)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _ctx && _ctx.state === 'suspended') {
+    _ctx.resume()
+  }
+})
+window.addEventListener('pageshow', () => {
+  if (_ctx && _ctx.state === 'suspended') _ctx.resume()
+})
+
 // ─── Fallback oscillateur (harpe, orgue, cordes, cuivres + pendant le chargement) ──
 const INSTR = {
   piano:   { type: 'triangle', atk: 0.02,  dec: 0.35, sus: 0.15 },

@@ -11,6 +11,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { getAudioFile } from '../store/index'
 import useStore from '../store/index'
 import { detectOnset } from '../lib/detectOnset'
+import useWakeLock from '../hooks/useWakeLock'
 
 const Paroles = lazy(() => import('./Paroles'))
 
@@ -67,6 +68,7 @@ function btnColor(btn) {
 export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
   const setSyncOffset = useStore((s) => s.setSyncOffset)
   const setSongs = (set.songIds || []).map((id) => songs.find((s) => s.id === id)).filter(Boolean)
+  const { acquire, release } = useWakeLock()
 
   // ── Sélection multi-pistes ────────────────────────────────────────────────
   // trackMap : { songId → string[] }  (tableau d'ids de boutons sélectionnés)
@@ -341,6 +343,15 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
       clearGap()
     }
   }, []) // eslint-disable-line
+
+  // WakeLock : maintenir l'écran éveillé pendant la lecture (y compris gap inter-morceaux)
+  useEffect(() => {
+    if (isPlaying || gapCountdown !== null) {
+      acquire()
+    } else {
+      release()
+    }
+  }, [isPlaying, gapCountdown, acquire, release])
 
   // Réattacher handleEnded si le callback change (trackMap mis à jour)
   useEffect(() => {

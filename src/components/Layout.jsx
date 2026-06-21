@@ -14,34 +14,31 @@ const NAV_ITEMS = [
   { to: '/parametres',  label: 'Réglages',   icon: '⚙️'  },
 ]
 
-const BACKUP_INTERVAL_DAYS = 30
 
 export default function Layout({ children }) {
   const modeScene       = useStore((s) => s.settings.modeScene)
   const theme           = useStore((s) => s.settings.theme)
-  const lastBackupDate    = useStore((s) => s.settings.lastBackupDate)
-  const directorPin       = useStore((s) => s.settings.directorPin)
-  const directorUnlocked  = useStore((s) => s.directorUnlocked)
-  const updateSettings    = useStore((s) => s.updateSettings)
-  const exportConfig      = useStore((s) => s.exportConfig)
-  // Le popup n'est visible que si pas de PIN configuré (tout le monde admin) ou PIN déverrouillé
-  const isDirector = !directorPin || directorUnlocked
+  const lastBackupDate      = useStore((s) => s.settings.lastBackupDate)
+  const libraryModifiedAt   = useStore((s) => s.settings.libraryModifiedAt)
+  const adminUnlocked       = useStore((s) => s.adminUnlocked)
+  const updateSettings      = useStore((s) => s.updateSettings)
+  const exportConfig        = useStore((s) => s.exportConfig)
   const { syncReady, firebaseEnabled, migrating, migrateProgress, appConfig } = useFirebaseSync()
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
   const [bypassMaintenance, setBypassMaintenance] = useState(false)
   const [showBackupPrompt, setShowBackupPrompt] = useState(false)
 
-  // Vérifie une fois au montage si une sauvegarde mensuelle est due
+  // Suggère une sauvegarde à l'admin dès qu'il se connecte, si la bibliothèque a été modifiée depuis
   useEffect(() => {
-    const now = Date.now()
-    const last = lastBackupDate ? new Date(lastBackupDate).getTime() : 0
-    const daysSince = (now - last) / (1000 * 60 * 60 * 24)
-    if (daysSince >= BACKUP_INTERVAL_DAYS && isDirector) {
+    if (!adminUnlocked) return
+    const modified = libraryModifiedAt ? new Date(libraryModifiedAt).getTime() : 0
+    const backed   = lastBackupDate    ? new Date(lastBackupDate).getTime()    : 0
+    if (modified > backed) {
       const t = setTimeout(() => setShowBackupPrompt(true), 1500)
       return () => clearTimeout(t)
     }
-  }, [isDirector]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [adminUnlocked]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const [backupProgress, setBackupProgress] = useState(null)
@@ -79,9 +76,8 @@ export default function Layout({ children }) {
   }
 
   const handleBackupNo = () => {
-    // Reporte d'une semaine pour ne pas re-demander tout de suite
-    const inOneWeek = new Date(Date.now() - (BACKUP_INTERVAL_DAYS - 7) * 24 * 60 * 60 * 1000).toISOString()
-    updateSettings({ lastBackupDate: inOneWeek })
+    // "Plus tard" : marque la date de sauvegarde à maintenant pour ne pas re-demander à cette session
+    updateSettings({ lastBackupDate: new Date().toISOString() })
     setShowBackupPrompt(false)
   }
 

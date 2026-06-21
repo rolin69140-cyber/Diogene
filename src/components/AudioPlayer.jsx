@@ -4,6 +4,7 @@ import useAudioPlayer from '../hooks/useAudioPlayer'
 import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
 import { detectOnset } from '../lib/detectOnset'
+import useWakeLock from '../hooks/useWakeLock'
 
 const SPEEDS = [0.75, 0.85, 1, 1.1, 1.2]
 const TRANSPOSES = [
@@ -45,11 +46,13 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
 
   const player = useAudioPlayer()
   const { playPupitre } = usePianoSynth()
+  const { acquire, release } = useWakeLock()
   const [showMetronome, setShowMetronome] = useState(false)
   const [markerMenu, setMarkerMenu] = useState(null)
   // Fichiers manquants dans IndexedDB (mode multi-track) — [] = tous présents
   const [missingButtons, setMissingButtons] = useState([])
   const [downloadStatus, setDownloadStatus] = useState(null) // null | 'loading' | 'done' | 'error'
+  const [downloadError, setDownloadError]   = useState(null) // message d'erreur précis
   // Incrémenté après un téléchargement réussi pour forcer le rechargement des pistes
   const [trackReloadKey, setTrackReloadKey] = useState(0)
 
@@ -184,10 +187,13 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
   const downloadAllTracks = useCallback(async () => {
     const toDownload = missingButtons.filter((btn) => btn?.storageUrl && (btn?.fileId || btn?.id))
     if (!toDownload.length) {
-      console.warn('[MultiTrack] downloadAllTracks — aucune piste téléchargeable (storageUrl/id manquant ?)')
+      const names = missingButtons.map((b) => b.label).join(', ')
+      setDownloadError(`Fichier(s) non disponibles en ligne (${names}) — contacter l'administrateur`)
+      setDownloadStatus('error')
       return
     }
     setDownloadStatus('loading')
+    setDownloadError(null)
     try {
       await Promise.all(toDownload.map(async (btn) => {
         const key = btn.fileId || btn.id
@@ -203,6 +209,22 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
       setTrackReloadKey((k) => k + 1)
     } catch (e) {
       console.error('[MultiTrack] Échec téléchargement:', e)
+      // Identifier la cause réelle pour afficher un message utile
+      let msg
+      if (e.name === 'QuotaExceededError' || e.message?.toLowerCase().includes('quota')) {
+        msg = 'Stockage insuffisant sur l\'appareil'
+      } else if (e.message?.includes('HTTP 504')) {
+        msg = 'Connexion trop lente — réessayer en Wi-Fi'
+      } else if (e.message?.includes('HTTP 500')) {
+        msg = 'Fichier trop volumineux pour le proxy'
+      } else if (e.message?.includes('HTTP ')) {
+        msg = `Fichier indisponible (${e.message})`
+      } else if (e instanceof TypeError) {
+        msg = 'Erreur réseau — vérifier la connexion'
+      } else {
+        msg = `Erreur : ${e.name} — ${e.message || 'sans détail'}`
+      }
+      setDownloadError(msg)
       setDownloadStatus('error')
     }
   }, [missingButtons])
@@ -216,14 +238,26 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
     player.changeSpeed(newSpeed)
   }, [player])
 
+  // WakeLock : maintenir l'écran éveillé pendant la lecture
+  useEffect(() => {
+    if (player.isPlaying) {
+      acquire()
+    } else {
+      release()
+    }
+  }, [player.isPlaying, acquire, release])
+
   // Dessiner la waveform
   useEffect(() => {
-    if (!button?.fileId) return
+    // Clé cohérente avec celle utilisée lors du téléchargement (saveAudioFile) :
+    // fileId en priorité, sinon id du bouton (cas des pistes sans fileId comme Voix 1/Voix 2)
+    const fileKey = button?.fileId || button?.id
+    if (!fileKey) return
     let cancelled = false
     async function drawWaveform() {
       // Essai IndexedDB uniquement (pas de fetch pour la waveform sur iOS)
       let arrayBuf = null
-      const record = await getAudioFile(button.fileId)
+      const record = await getAudioFile(fileKey)
       if (record) {
         arrayBuf = record.data instanceof ArrayBuffer ? record.data : await record.data.arrayBuffer?.()
       }
@@ -260,7 +294,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
     }
     drawWaveform()
     return () => { cancelled = true }
-  }, [button?.fileId])
+  }, [button?.fileId, button?.id])
 
   useEffect(() => {
     if (!button?.fileId) return
@@ -552,7 +586,7 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
             >
               {downloadStatus === 'loading' ? '⏳ Téléchargement en cours...'
                 : downloadStatus === 'done' ? '✓ Pistes enregistrées'
-                : downloadStatus === 'error' ? '⚠️ Erreur — réessayer'
+                : downloadStatus === 'error' ? `⚠️ ${downloadError || 'Erreur — réessayer'}`
                 : `⬇ Télécharger (${missingButtons.length} piste${missingButtons.length > 1 ? 's' : ''})`}
             </button>
           </div>

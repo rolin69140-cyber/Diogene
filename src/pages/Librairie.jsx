@@ -39,6 +39,7 @@ function ChantsTab() {
   const songs = useStore((s) => s.songs)
   const addSong = useStore((s) => s.addSong)
   const updateSong = useStore((s) => s.updateSong)
+  const saveUndo = useStore((s) => s.saveUndo)
   const { deleteSongWithFiles, mergeSongs, undo, canUndo, undoLabel } = useLibrary()
   const { importing, importProgress, uploading, uploadProgress, proposals, setProposals, analyzeFiles, confirmImport, importLyrics } = useImportAudio()
 
@@ -47,10 +48,9 @@ function ChantsTab() {
   const [search, setSearch] = useState('')
   const [dragOverId, setDragOverId] = useState(null)
   const [pendingMerge, setPendingMerge] = useState(null) // { sourceId, targetId }
-  const [showUndoToast, setShowUndoToast] = useState(false)
-  const undoTimerRef = useRef(null)
 
   const adminUnlocked     = useStore((s) => s.adminUnlocked)
+  const directorUnlocked  = useStore((s) => s.directorUnlocked)
   const unlockAdmin       = useStore((s) => s.unlockAdmin)
   const [adminPinPending, setAdminPinPending] = useState(null)
   const [adminPinInput, setAdminPinInput]     = useState('')
@@ -58,6 +58,14 @@ function ChantsTab() {
 
   const withAdmin = (fn) => {
     if (adminUnlocked || !import.meta.env.VITE_ADMIN_PIN) { fn(); return }
+    setAdminPinPending(() => fn)
+    setAdminPinInput('')
+    setAdminPinError(false)
+  }
+
+  // Accessible chef de chœur connecté (notes d'attaque) ou admin
+  const withDirector = (fn) => {
+    if (directorUnlocked || adminUnlocked || !import.meta.env.VITE_ADMIN_PIN) { fn(); return }
     setAdminPinPending(() => fn)
     setAdminPinInput('')
     setAdminPinError(false)
@@ -74,15 +82,7 @@ function ChantsTab() {
     }
   }
 
-  // Affiche le toast dès qu'une action annulable est disponible
-  useEffect(() => {
-    if (canUndo) {
-      setShowUndoToast(true)
-      clearTimeout(undoTimerRef.current)
-      undoTimerRef.current = setTimeout(() => setShowUndoToast(false), 6000)
-    }
-    return () => clearTimeout(undoTimerRef.current)
-  }, [undoLabel]) // se déclenche à chaque nouvelle action
+  // Le toast reste visible tant qu'il y a une action annulable
 
   const filtered = songs
     .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
@@ -103,14 +103,13 @@ function ChantsTab() {
     <div className="p-4">
 
       {/* Toast Annuler */}
-      {showUndoToast && canUndo && (
+      {canUndo && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 px-4 py-3 rounded-2xl shadow-2xl text-sm animate-fade-in">
           <span className="truncate max-w-48 opacity-80">{undoLabel}</span>
           <button
-            onClick={() => { undo(); setShowUndoToast(false) }}
+            onClick={() => undo()}
             className="font-semibold text-orange-400 dark:text-orange-600 hover:text-orange-300 whitespace-nowrap"
           >↩ Annuler</button>
-          <button onClick={() => setShowUndoToast(false)} className="opacity-40 hover:opacity-70 text-lg leading-none">×</button>
         </div>
       )}
 
@@ -159,7 +158,7 @@ function ChantsTab() {
       {/* Formulaire ajout chant */}
       {showAddForm && (
         <AddSongForm
-          onSave={(data) => { addSong(data); setShowAddForm(false) }}
+          onSave={(data) => { saveUndo('Ajout d\'un chant'); addSong(data); setShowAddForm(false) }}
           onCancel={() => setShowAddForm(false)}
         />
       )}
@@ -187,6 +186,7 @@ function ChantsTab() {
               setProposals(results.map((r) => ({ ...r, songName: song.name })))
             }}
             withAdmin={withAdmin}
+            withDirector={withDirector}
           />
         ))}
 
@@ -504,7 +504,7 @@ function ButtonRenamePicker({ current, onSelect, onClose }) {
   )
 }
 
-function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportAudio, dragOverId, setDragOverId, onDragMerge, withAdmin }) {
+function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportAudio, dragOverId, setDragOverId, onDragMerge, withAdmin, withDirector }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [merging, setMerging] = useState(false)
@@ -523,12 +523,19 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
   const updateSong = useStore((s) => s.updateSong)
   const updateButtonLabel = useStore((s) => s.updateButtonLabel)
   const toggleHiddenPupitre = useStore((s) => s.toggleHiddenPupitre)
+  // Labels locaux pour éviter de sauvegarder à chaque frappe
+  const [localLabels, setLocalLabels] = useState(() => {
+    const init = {}
+    for (const p of [...PUPITRES, '5']) init[p] = song.buttonLabels?.[p] || ''
+    return init
+  })
   const removeAudioButton = useStore((s) => s.removeAudioButton)
   const renameAudioButton = useStore((s) => s.renameAudioButton)
   const setSyncMarker     = useStore((s) => s.setSyncMarker)
   const removePdfFromSong = useStore((s) => s.removePdfFromSong)
   const renamePdfInSong = useStore((s) => s.renamePdfInSong)
   const deduplicateSongButtons = useStore((s) => s.deduplicateSongButtons)
+  const saveUndo = useStore((s) => s.saveUndo)
 
   // ── Protection admin ──────────────────────────────────────────────────────
   const adminUnlocked  = useStore((s) => s.adminUnlocked)
@@ -548,6 +555,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
       const notes = (editNotes[p] || []).filter((n) => n.trim())
       if (notes.length) attackNotes[p] = notes
     })
+    saveUndo(`Modification de "${song.name}"`)
     updateSong(song.id, {
       name: editName.trim() || song.name,
       bpm: editBpm ? Number(editBpm) : null,
@@ -624,14 +632,16 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                   return (
                   <div key={p} className="flex items-center gap-1.5">
                     <input type="checkbox" checked={!hidden}
-                      onChange={() => toggleHiddenPupitre(song.id, p)}
+                      onChange={() => { saveUndo(`Visibilité pupitre ${p} dans "${song.name}"`); toggleHiddenPupitre(song.id, p) }}
                       className="accent-blue-600 flex-shrink-0 w-4 h-4"
                     />
                     <span className={`w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0 transition-opacity ${hidden ? 'opacity-30' : ''}`}
                       style={{ backgroundColor: PUPITRE_COLORS[p] }}>{p}</span>
                     <input
-                      value={song.buttonLabels?.[p] || ''}
-                      onChange={(e) => updateButtonLabel(song.id, p, e.target.value)}
+                      value={localLabels[p] ?? ''}
+                      onFocus={() => saveUndo(`Label pupitre ${p} dans "${song.name}"`)}
+                      onChange={(e) => setLocalLabels((prev) => ({ ...prev, [p]: e.target.value }))}
+                      onBlur={(e) => updateButtonLabel(song.id, p, e.target.value)}
                       placeholder={p}
                       disabled={hidden}
                       className={`flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700 ${hidden ? 'opacity-30' : ''}`}
@@ -644,14 +654,16 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                   <div className="flex items-center gap-1.5 col-span-2">
                     <input type="checkbox"
                       checked={!(song.hiddenPupitres || []).includes('5')}
-                      onChange={() => toggleHiddenPupitre(song.id, '5')}
+                      onChange={() => { saveUndo(`Visibilité 5e voix dans "${song.name}"`); toggleHiddenPupitre(song.id, '5') }}
                       className="accent-blue-600 flex-shrink-0 w-4 h-4"
                     />
                     <span className={`w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0 transition-opacity ${(song.hiddenPupitres || []).includes('5') ? 'opacity-30' : ''}`}
                       style={{ backgroundColor: '#7C3AED' }}>5</span>
                     <input
-                      value={song.buttonLabels?.['5'] || ''}
-                      onChange={(e) => updateButtonLabel(song.id, '5', e.target.value)}
+                      value={localLabels['5'] ?? ''}
+                      onFocus={() => saveUndo(`Label 5e voix dans "${song.name}"`)}
+                      onChange={(e) => setLocalLabels((prev) => ({ ...prev, '5': e.target.value }))}
+                      onBlur={(e) => updateButtonLabel(song.id, '5', e.target.value)}
                       placeholder="5e voix (optionnel)"
                       disabled={(song.hiddenPupitres || []).includes('5')}
                       className={`flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700 ${(song.hiddenPupitres || []).includes('5') ? 'opacity-30' : ''}`}
@@ -663,8 +675,10 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                     <span className="w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0 opacity-30"
                       style={{ backgroundColor: '#7C3AED' }}>5</span>
                     <input
-                      value=""
-                      onChange={(e) => updateButtonLabel(song.id, '5', e.target.value)}
+                      value={localLabels['5'] ?? ''}
+                      onFocus={() => saveUndo(`Label 5e voix dans "${song.name}"`)}
+                      onChange={(e) => setLocalLabels((prev) => ({ ...prev, '5': e.target.value }))}
+                      onBlur={(e) => updateButtonLabel(song.id, '5', e.target.value)}
                       placeholder="5e voix (optionnel)"
                       className="flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-900 dark:border-gray-700"
                     />
@@ -772,13 +786,13 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                         {btn.syncMarker != null ? `⏱ ${btn.syncMarker}s` : '⏱'}
                       </button>
                       <button onClick={() => withAdmin(() => setRenamingBtn({ id: btn.id, label: btn.label }))} className="text-blue-500">✏️</button>
-                      <button onClick={() => withAdmin(() => removeAudioButton(song.id, btn.id))} className="text-red-400">✕</button>
+                      <button onClick={() => withAdmin(() => { saveUndo(`Suppression de "${btn.label}" dans "${song.name}"`); removeAudioButton(song.id, btn.id) })} className="text-red-400">✕</button>
                     </div>
                   ))}
                   {renamingBtn && (
                     <ButtonRenamePicker
                       current={renamingBtn.label}
-                      onSelect={(newLabel) => renameAudioButton(song.id, renamingBtn.id, newLabel)}
+                      onSelect={(newLabel) => { saveUndo(`Renommage de "${renamingBtn.label}" → "${newLabel}" dans "${song.name}"`); renameAudioButton(song.id, renamingBtn.id, newLabel) }}
                       onClose={() => setRenamingBtn(null)}
                     />
                   )}
@@ -810,11 +824,11 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                           const newLabel = (!isNaN(num) && num >= 1 && num <= unique.length)
                             ? unique[num - 1]
                             : choice.trim()
-                          if (newLabel) renamePdfInSong(song.id, pdf.id, newLabel)
+                          if (newLabel) { saveUndo(`Renommage PDF "${pdf.label}" → "${newLabel}" dans "${song.name}"`); renamePdfInSong(song.id, pdf.id, newLabel) }
                         })}
                         className="text-blue-500 flex-shrink-0"
                       >✏️</button>
-                      <button onClick={() => withAdmin(() => removePdfFromSong(song.id, pdf.id))} className="text-red-400 flex-shrink-0">✕</button>
+                      <button onClick={() => withAdmin(() => { saveUndo(`Suppression PDF "${pdf.label}" dans "${song.name}"`); removePdfFromSong(song.id, pdf.id) })} className="text-red-400 flex-shrink-0">✕</button>
                     </div>
                   ))}
                 </div>
@@ -825,7 +839,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
           {/* Actions */}
           {!editing && !merging && (
           <div className="flex flex-wrap gap-2 mt-2">
-            <button onClick={() => withAdmin(() => setEditing(true))}
+            <button onClick={() => withDirector(() => setEditing(true))}
               className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
               ✏️ Modifier
             </button>
@@ -1139,8 +1153,9 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
   const setActiveConcertSet = useStore((s) => s.setActiveConcertSet)
   const activeConcertSetId  = useStore((s) => s.activeConcertSetId)
   const directorUnlocked    = useStore((s) => s.directorUnlocked)
-  const directorPin         = useStore((s) => s.settings.directorPin)
+  const directorPin         = useStore((s) => s.directorPin)
   const directorCodes       = useStore((s) => s.directorCodes)
+  const configLoaded        = useStore((s) => s.configLoaded)
   const deviceId            = useStore((s) => s.settings.deviceId)
   const unlockDirector      = useStore((s) => s.unlockDirector)
 
@@ -1310,26 +1325,30 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
           {showPinForm && (
             <div className="mt-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-3">
               <p className="text-xs text-indigo-700 dark:text-indigo-300 font-medium mb-2">Code requis pour supprimer un set</p>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    autoFocus
-                    type={showPin ? 'text' : 'password'}
-                    value={pinInput}
-                    onChange={(e) => { setPinInput(e.target.value); setPinError(false) }}
-                    onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
-                    placeholder="Code d'accès…"
-                    className={`w-full px-3 py-2 text-sm font-mono rounded-lg border focus:outline-none ${
-                      pinError ? 'border-red-400 bg-red-50' : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900'
-                    }`}
-                  />
-                  <button type="button" onClick={() => setShowPin(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    {showPin ? '🙈' : '👁'}
-                  </button>
+              {!configLoaded ? (
+                <p className="text-xs text-indigo-400 animate-pulse py-2">⟳ Connexion en cours…</p>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      autoFocus
+                      type={showPin ? 'text' : 'password'}
+                      value={pinInput}
+                      onChange={(e) => { setPinInput(e.target.value); setPinError(false) }}
+                      onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+                      placeholder="Code d'accès…"
+                      className={`w-full px-3 py-2 text-sm font-mono rounded-lg border focus:outline-none ${
+                        pinError ? 'border-red-400 bg-red-50' : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900'
+                      }`}
+                    />
+                    <button type="button" onClick={() => setShowPin(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      {showPin ? '🙈' : '👁'}
+                    </button>
+                  </div>
+                  <button onClick={handlePinSubmit} className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium">OK</button>
+                  <button onClick={() => { setShowPinForm(false); setPinError(false); setPinInput('') }} className="px-3 py-2 text-sm text-gray-500 rounded-lg bg-gray-100 dark:bg-gray-800">✕</button>
                 </div>
-                <button onClick={handlePinSubmit} className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium">OK</button>
-                <button onClick={() => { setShowPinForm(false); setPinError(false); setPinInput('') }} className="px-3 py-2 text-sm text-gray-500 rounded-lg bg-gray-100 dark:bg-gray-800">✕</button>
-              </div>
+              )}
               {pinError && <p className="text-xs text-red-500 mt-1">Code incorrect.</p>}
             </div>
           )}
@@ -1428,6 +1447,7 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
 function NotesAttaqueTab() {
   const songs = useStore((s) => s.songs)
   const updateSong = useStore((s) => s.updateSong)
+  const saveUndo = useStore((s) => s.saveUndo)
 
   // Colonnes = B, A, S, T + voix 5 si présente dans au moins un chant
   const has5thVoice = songs.some((s) => s.buttonLabels?.['5'])
@@ -1520,6 +1540,7 @@ function NotesAttaqueTab() {
   }
 
   const handleSaveAll = () => {
+    saveUndo('Notes d\'attaque — sauvegarde globale')
     for (const song of songs) {
       const attackNotes = {}
       const buttonHints = {}

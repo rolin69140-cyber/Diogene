@@ -103,6 +103,76 @@ export async function recordDirectorLogin(codeId, wasTemp) {
   }
 }
 
+/**
+ * Dépose une demande de réinitialisation de code (chef de chœur).
+ * Stocké dans config/resetRequests : { requests: [{ id, name, requestedAt }] }
+ */
+export async function saveResetRequest(name) {
+  if (!FIREBASE_ENABLED || !db) return
+  const { generateUUID } = await import('../store/index')
+  const ref = doc(db, 'config', 'resetRequests')
+  const snap = await getDoc(ref)
+  const existing = snap.exists() ? (snap.data().requests || []) : []
+  // Éviter les doublons : une seule demande active par nom
+  const filtered = existing.filter((r) => r.name !== name)
+  const newRequest = { id: generateUUID(), name, requestedAt: new Date().toISOString(), newPin: null }
+  await setDoc(ref, { requests: [...filtered, newRequest] })
+}
+
+/**
+ * Approuve une demande : génère un nouveau code provisoire et le stocke.
+ * Met aussi à jour directorCodes dans config/app.
+ */
+export async function approveResetRequest(requestId, name) {
+  if (!FIREBASE_ENABLED || !db) return null
+  const newPin = String(Math.floor(100000 + Math.random() * 900000))
+
+  // 1. Mettre à jour directorCodes
+  const appSnap = await getDoc(doc(db, 'config', 'app'))
+  if (appSnap.exists()) {
+    const codes = appSnap.data().directorCodes || []
+    const updated = codes.map((c) =>
+      c.name === name ? { ...c, pin: newPin, isTemp: true } : c
+    )
+    await setDoc(doc(db, 'config', 'app'), { directorCodes: updated }, { merge: true })
+  }
+
+  // 2. Marquer la demande comme approuvée (newPin visible côté chef)
+  const reqRef = doc(db, 'config', 'resetRequests')
+  const reqSnap = await getDoc(reqRef)
+  if (reqSnap.exists()) {
+    const requests = reqSnap.data().requests || []
+    const updated = requests.map((r) =>
+      r.id === requestId ? { ...r, newPin, approvedAt: new Date().toISOString() } : r
+    )
+    await setDoc(reqRef, { requests: updated })
+  }
+
+  return newPin
+}
+
+/**
+ * Supprime une demande traitée (refus ou après que le chef a vu son code).
+ */
+export async function deleteResetRequest(requestId) {
+  if (!FIREBASE_ENABLED || !db) return
+  const ref = doc(db, 'config', 'resetRequests')
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return
+  const requests = (snap.data().requests || []).filter((r) => r.id !== requestId)
+  await setDoc(ref, { requests })
+}
+
+/**
+ * Écoute en temps réel les demandes de réinitialisation.
+ */
+export function subscribeResetRequests(callback) {
+  if (!FIREBASE_ENABLED || !db) return () => {}
+  return onSnapshot(doc(db, 'config', 'resetRequests'), (snap) => {
+    callback(snap.exists() ? (snap.data().requests || []) : [])
+  })
+}
+
 // ─── Firestore : bibliothèque ─────────────────────────────────────────────────
 
 /**

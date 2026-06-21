@@ -102,27 +102,30 @@ export default function useLibrary() {
       markers: {},
       annotations: {},
     }
+    saveUndo(`Création du set "${newSet.name}"`)
     _addSet(newSet)
     try { await fbSaveSet(newSet) } catch (e) { console.warn('[Firebase] addSet failed:', e) }
     if (unlockedAs) logDirectorActivity({ who: unlockedAs, action: 'a créé le set', target: newSet.name })
     return newSet
-  }, [_addSet, unlockedAs])
+  }, [_addSet, saveUndo, unlockedAs])
 
   const updateSet = useCallback(async (id, updates) => {
     const current = sets.find((s) => s.id === id)
+    if (current) saveUndo(`Modification du set "${current.name}"`)
     _updateSet(id, updates)
     if (current) {
       try { await fbSaveSet({ ...current, ...updates }) } catch (e) { console.warn('[Firebase] updateSet failed:', e) }
       if (unlockedAs) logDirectorActivity({ who: unlockedAs, action: 'a modifié le set', target: current.name })
     }
-  }, [_updateSet, sets, unlockedAs])
+  }, [_updateSet, sets, saveUndo, unlockedAs])
 
   const deleteSet = useCallback(async (id) => {
     const current = sets.find((s) => s.id === id)
+    if (current) saveUndo(`Suppression du set "${current.name}"`)
     _deleteSet(id)
     try { await fbDeleteSet(id) } catch (e) { console.warn('[Firebase] deleteSet failed:', e) }
     if (unlockedAs && current) logDirectorActivity({ who: unlockedAs, action: 'a supprimé le set', target: current.name })
-  }, [_deleteSet, sets, unlockedAs])
+  }, [_deleteSet, sets, saveUndo, unlockedAs])
 
   const exportToFile = useCallback(() => {
     const json = exportConfig()
