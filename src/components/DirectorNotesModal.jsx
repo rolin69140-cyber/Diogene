@@ -172,8 +172,9 @@ export default function DirectorNotesModal({ songId, onClose }) {
 
   // pinConfigured : vrai si PIN legacy défini OU si système nominatif actif
   const pinConfigured = !!directorPin || directorCodes.length > 0
-  const hasContent    = text.trim().length > 0
-  // En mode Firebase, on considère "pas encore chargé" tant que synced n'est pas true
+  // En lecture, on affiche remoteNotes directement (pas text qui a 1 render de retard)
+  const displayText   = firebaseEnabled ? remoteNotes : text
+  const hasContent    = displayText.trim().length > 0
   const isReady       = !firebaseEnabled || synced
 
   return (
@@ -244,7 +245,7 @@ export default function DirectorNotesModal({ songId, onClose }) {
             /* Mode lecture */
             <div className="px-5 py-4">
               {hasContent ? (
-                <NotesEditor value={text} readOnly />
+                <NotesEditor value={displayText} readOnly />
               ) : (
                 <p className="text-sm text-gray-400 dark:text-gray-600 italic text-center py-8">
                   Aucune note du chef de chœur pour ce chant.
