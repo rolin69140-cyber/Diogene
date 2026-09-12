@@ -238,7 +238,6 @@ export default function DirectorNotesModal({ songId, onClose }) {
               value={text}
               onChange={handleChange}
               placeholder={`Instructions pour « ${song.name} »…`}
-              autoFocus
             />
           ) : (
             /* Mode lecture */

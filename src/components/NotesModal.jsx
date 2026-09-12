@@ -91,7 +91,7 @@ export default function NotesModal({ songId, onClose }) {
           value={text}
           onChange={handleChange}
           placeholder={`Notes pour « ${song.name} »…`}
-          autoFocus
+
         />
 
         {/* Pied : indicateur de sauvegarde */}
