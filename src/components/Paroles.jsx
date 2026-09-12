@@ -284,22 +284,16 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
     if (!selectedPdf) return
     const fileId = selectedPdf.fileId || selectedPdf.id
     let blobUrl = null
-    console.log('[Paroles] selectedPdf:', JSON.stringify(selectedPdf), '| fileId:', fileId)
     getPdfFile(fileId).then((record) => {
-      console.log('[Paroles] getPdfFile result:', record ? 'blob trouvé' : 'pas de blob', '| storageUrl:', selectedPdf.storageUrl)
       if (record) {
         const blob = new Blob([record.data], { type: 'application/pdf' })
         blobUrl = URL.createObjectURL(blob)
         setPdfUrl(blobUrl)
       } else if (selectedPdf.storageUrl) {
         setPdfUrl(selectedPdf.storageUrl)
-      } else {
-        console.warn('[Paroles] Aucune source PDF disponible')
-        alert('[Paroles] Aucune source PDF : pas de blob local ni storageUrl')
       }
     }).catch((e) => {
-      console.error('[Paroles] getPdfFile erreur:', e)
-      alert('[Paroles] getPdfFile erreur: ' + e?.message)
+      console.warn('[Paroles] getPdfFile erreur:', e)
     })
     return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }, [selectedPdfId])

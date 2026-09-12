@@ -83,8 +83,7 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '', o
         }
       } catch (e) {
         if (!cancelled) {
-          console.error('[PdfViewer] erreur chargement:', e?.message || e, '| url:', url)
-          alert('[PdfViewer] ' + (e?.message || String(e)))
+          console.warn('[PdfViewer] erreur chargement:', e?.message || e)
           setError('Impossible de charger le PDF')
           setLoading(false)
         }
