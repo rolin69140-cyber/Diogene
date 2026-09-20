@@ -103,12 +103,12 @@ function startOsc(ctx, comp, hz, instrument, volume) {
 // Une note toutes les 3 demi-tons (tierce majeure) → interpolation max ±1,5 demi-tons
 const PIANO_BASE  = 'https://tonejs.github.io/audio/salamander/'
 const PIANO_NOTES = {
-  21: 'A0.mp3',  24: 'C1.mp3',  27: 'D#1.mp3', 30: 'F#1.mp3',
-  33: 'A1.mp3',  36: 'C2.mp3',  39: 'D#2.mp3', 42: 'F#2.mp3',
-  45: 'A2.mp3',  48: 'C3.mp3',  51: 'D#3.mp3', 54: 'F#3.mp3',
-  57: 'A3.mp3',  60: 'C4.mp3',  63: 'D#4.mp3', 66: 'F#4.mp3',
-  69: 'A4.mp3',  72: 'C5.mp3',  75: 'D#5.mp3', 78: 'F#5.mp3',
-  81: 'A5.mp3',  84: 'C6.mp3',  87: 'D#6.mp3', 90: 'F#6.mp3',
+  21: 'A0.mp3',  24: 'C1.mp3',  27: 'Ds1.mp3', 30: 'Fs1.mp3',
+  33: 'A1.mp3',  36: 'C2.mp3',  39: 'Ds2.mp3', 42: 'Fs2.mp3',
+  45: 'A2.mp3',  48: 'C3.mp3',  51: 'Ds3.mp3', 54: 'Fs3.mp3',
+  57: 'A3.mp3',  60: 'C4.mp3',  63: 'Ds4.mp3', 66: 'Fs4.mp3',
+  69: 'A4.mp3',  72: 'C5.mp3',  75: 'Ds5.mp3', 78: 'Fs5.mp3',
+  81: 'A5.mp3',  84: 'C6.mp3',  87: 'Ds6.mp3', 90: 'Fs6.mp3',
   93: 'A6.mp3',  96: 'C7.mp3',
 }
 

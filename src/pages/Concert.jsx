@@ -253,7 +253,7 @@ export default function Concert() {
                   style={{ backgroundColor: color, fontSize: btnFontSize, lineHeight: 1.2 }}
                   className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
-                    e.currentTarget.setPointerCapture(e.pointerId)
+                    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
 
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
                     holdStopRef.current?.()
