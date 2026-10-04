@@ -32,7 +32,7 @@ import { registerAudioContext } from '../lib/audioResume'
 
 // Reprendre le contexte Tone.js quand l'appli revient au premier plan
 // (visibilitychange / pageshow / focus + fallback au 1er geste, voir audioResume.js)
-registerAudioContext(() => Tone.getContext()?.rawContext, () => { Tone.start().catch(() => {}) })
+registerAudioContext(() => Tone.getContext()?.rawContext, () => { Tone.start().catch(() => {}) }, 'tone')
 
 export default function useAudioPlayer() {
 

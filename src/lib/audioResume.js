@@ -8,6 +8,12 @@
  * Ce module ne CRÉE aucun contexte : ils restent créés dans le geste utilisateur
  * par leurs modules respectifs (règle iOS). Il se contente de les reprendre.
  *
+ * RÈGLE DE MAINTENANCE : tout `new AudioContext()` PERSISTANT (qui joue du son) ou
+ * tout accès à Tone.getContext() doit être enregistré ici via registerAudioContext().
+ * Exclus volontairement : OfflineAudioContext (aucune sortie audio, ne peut pas être
+ * interrompu) et les contextes jetables fermés juste après decodeAudioData
+ * (useWaveform, detectOnset). Les <audio>/new Audio() ne sont pas des AudioContext.
+ *
  * Déclencheurs :
  *   - visibilitychange (visible), pageshow, focus : retour au premier plan
  *   - premier geste suivant (pointerup / touchend / click) : sur iOS, resume()
@@ -15,12 +21,18 @@
  */
 
 const entries = new Set()
+const ids = new Set()
 
 /**
  * @param {() => AudioContext | null | undefined} getCtx  renvoie le contexte courant (peut être null)
  * @param {() => void} [onGesture]  appelé en plus du resume() lors d'un geste utilisateur (ex. Tone.start)
+ * @param {string} [id]  clé de dédoublonnage (ex. 'tone' : plusieurs modules partagent le contexte Tone)
  */
-export function registerAudioContext(getCtx, onGesture) {
+export function registerAudioContext(getCtx, onGesture, id) {
+  if (id) {
+    if (ids.has(id)) return
+    ids.add(id)
+  }
   entries.add({ getCtx, onGesture })
 }
 

@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react'
-import { start as toneStart } from 'tone'
+import { start as toneStart, getContext as toneGetContext } from 'tone'
 import { registerAudioContext } from '../lib/audioResume'
 
 // Notes par défaut par pupitre
@@ -76,6 +76,8 @@ function playFreq(audioCtx, compressor, freq, volume = 0.8, duration = 1.5) {
 let sharedCtx = null
 let sharedCompressor = null
 registerAudioContext(() => sharedCtx)
+// Contexte Tone (démarré par toneStart() ci-dessous) — dédoublonné avec useAudioPlayer
+registerAudioContext(() => toneGetContext()?.rawContext, () => { toneStart().catch(() => {}) }, 'tone')
 function getCtx() {
   if (!sharedCtx || sharedCtx.state === 'closed') {
     sharedCtx = new AudioContext()

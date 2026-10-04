@@ -6,9 +6,12 @@
  * Tone.js crée son contexte au chargement du module → suspendu → 3 s de latence.
  */
 
+import { registerAudioContext } from './audioResume.js'
+
 // Contexte partagé + compresseur maître
 let sharedCtx = null
 let sharedComp = null
+registerAudioContext(() => sharedCtx)
 
 function getCtx() {
   if (!sharedCtx || sharedCtx.state === 'closed') {
@@ -21,7 +24,7 @@ function getCtx() {
     sharedComp.attack.value    = 0.003
     sharedComp.release.value   = 0.15
     sharedComp.connect(sharedCtx.destination)
-  } else if (sharedCtx.state === 'suspended') {
+  } else if (sharedCtx.state !== 'running') {   // 'suspended' (Android) ou 'interrupted' (iOS)
     sharedCtx.resume()
   }
   return { ctx: sharedCtx, comp: sharedComp }
