@@ -23,13 +23,41 @@ if ('serviceWorker' in navigator) {
     window.location.reload()
   })
 
-  // Forcer la vérification de mise à jour au démarrage.
-  // Sans ça, iOS Safari PWA peut attendre jusqu'à 24h avant de vérifier.
-  // navigator.serviceWorker.ready est une Promise qui résout quand le SW est actif.
+  // Sans vérification explicite, iOS Safari PWA et Android Chrome peuvent
+  // attendre jusqu'à 24h avant de recontrôler /sw.js — d'où le besoin de
+  // fermer/rouvrir l'app pour voir une mise à jour. On vérifie donc :
+  // 1. au démarrage (comportement existant)
+  // 2. à chaque retour au premier plan (l'app était en arrière-plan ou
+  //    l'écran était verrouillé — l'utilisateur ne joue pas de note à cet
+  //    instant, donc un rechargement déclenché par controllerchange ne
+  //    coupera pas une note tenue ou une lecture en cours)
+  // On ne fait volontairement PAS de vérification périodique (setInterval)
+  // en tâche de fond : ça pourrait activer un nouveau SW — et donc forcer
+  // un reload via controllerchange — pendant qu'un pupitre joue une note
+  // ou qu'un morceau est en lecture (répétition/concert), ce qui couperait
+  // le son en plein usage.
   navigator.serviceWorker.ready.then((registration) => {
-    registration.update().catch(() => {
-      // Silencieux — hors-ligne ou requête bloquée, pas de problème
+    const checkForUpdate = () => {
+      registration.update().catch(() => {
+        // Silencieux — hors-ligne ou requête bloquée, pas de problème
+      })
+    }
+
+    checkForUpdate()
+
+    let lastCheck = Date.now()
+    const THROTTLE_MS = 60_000 // évite les vérifications en rafale (focus + visibilitychange quasi simultanés)
+    const checkIfDue = () => {
+      const now = Date.now()
+      if (now - lastCheck < THROTTLE_MS) return
+      lastCheck = now
+      checkForUpdate()
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkIfDue()
     })
+    window.addEventListener('focus', checkIfDue)
   })
 }
 import { createRoot } from 'react-dom/client'
