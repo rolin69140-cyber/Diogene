@@ -28,18 +28,11 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { getAudioFile } from '../store/index'
 import * as Tone from 'tone'
+import { registerAudioContext } from '../lib/audioResume'
 
 // Reprendre le contexte Tone.js quand l'appli revient au premier plan
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    const raw = Tone.getContext()?.rawContext
-    if (raw && raw.state === 'suspended') raw.resume()
-  }
-})
-window.addEventListener('pageshow', () => {
-  const raw = Tone.getContext()?.rawContext
-  if (raw && raw.state === 'suspended') raw.resume()
-})
+// (visibilitychange / pageshow / focus + fallback au 1er geste, voir audioResume.js)
+registerAudioContext(() => Tone.getContext()?.rawContext, () => { Tone.start().catch(() => {}) })
 
 export default function useAudioPlayer() {
 

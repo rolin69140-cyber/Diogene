@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react'
 import { start as toneStart } from 'tone'
+import { registerAudioContext } from '../lib/audioResume'
 
 // Notes par défaut par pupitre
 const DEFAULT_NOTES = {
@@ -74,6 +75,7 @@ function playFreq(audioCtx, compressor, freq, volume = 0.8, duration = 1.5) {
 // Contexte audio partagé + compresseur maître (évite le clipping)
 let sharedCtx = null
 let sharedCompressor = null
+registerAudioContext(() => sharedCtx)
 function getCtx() {
   if (!sharedCtx || sharedCtx.state === 'closed') {
     sharedCtx = new AudioContext()
@@ -85,7 +87,7 @@ function getCtx() {
     sharedCompressor.release.value   = 0.15
     sharedCompressor.connect(sharedCtx.destination)
   }
-  if (sharedCtx.state === 'suspended') {
+  if (sharedCtx.state !== 'running') {   // 'suspended' (Android) ou 'interrupted' (iOS)
     sharedCtx.resume()
   }
   return { ctx: sharedCtx, compressor: sharedCompressor }

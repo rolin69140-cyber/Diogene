@@ -19,6 +19,7 @@
  */
 
 import { noteStrToFreq as _noteStrToFreq } from './attackSynth.js'
+import { registerAudioContext } from './audioResume.js'
 
 // Re-export pour les modules appelants (Concert, Repetition)
 export { noteStrToFreq } from './attackSynth.js'
@@ -37,22 +38,15 @@ function getCtx() {
     _comp.attack.value    = 0.003
     _comp.release.value   = 0.15
     _comp.connect(_ctx.destination)
-  } else if (_ctx.state === 'suspended') {
+  } else if (_ctx.state !== 'running') {   // 'suspended' (Android) ou 'interrupted' (iOS)
     _ctx.resume()
   }
   return { ctx: _ctx, comp: _comp }
 }
 
-// Reprendre l'AudioContext automatiquement quand l'appli revient au premier plan
-// (iOS/Android suspendent le contexte audio en arrière-plan)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && _ctx && _ctx.state === 'suspended') {
-    _ctx.resume()
-  }
-})
-window.addEventListener('pageshow', () => {
-  if (_ctx && _ctx.state === 'suspended') _ctx.resume()
-})
+// Reprendre l'AudioContext quand l'appli revient au premier plan
+// (iOS/Android suspendent le contexte audio en arrière-plan — voir audioResume.js)
+registerAudioContext(() => _ctx)
 
 // ─── Fallback oscillateur (harpe, orgue, cordes, cuivres + pendant le chargement) ──
 const INSTR = {

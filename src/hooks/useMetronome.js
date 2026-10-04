@@ -1,15 +1,17 @@
 import { useRef, useState, useCallback } from 'react'
+import { registerAudioContext } from '../lib/audioResume'
 
 // ✅ iOS + ✅ Android : webkitAudioContext pour compatibilité anciens WebKit
 const AC = window.AudioContext || window.webkitAudioContext
 
 let sharedCtx = null
+registerAudioContext(() => sharedCtx)
 function getCtx() {
   // Créé uniquement ici, appelé depuis un geste utilisateur (bouton start métronome)
   if (!sharedCtx || sharedCtx.state === 'closed') {
     sharedCtx = new AC()
   }
-  if (sharedCtx.state === 'suspended') sharedCtx.resume()
+  if (sharedCtx.state !== 'running') sharedCtx.resume()   // 'suspended' ou 'interrupted' (iOS)
   return sharedCtx
 }
 
