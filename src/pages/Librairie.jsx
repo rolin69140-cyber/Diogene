@@ -3,6 +3,7 @@ import useStore, { PUPITRES, PUPITRE_COLORS, PUPITRE_LABELS } from '../store/ind
 import useImportAudio, { PDF_LABELS, PDF_MAX } from '../hooks/useImportAudio'
 import useLibrary from '../hooks/useLibrary'
 import useBgImage from '../hooks/useBgImage'
+import { findTuttiButton } from '../lib/songPlayback'
 
 const TABS = ['Chants', 'Sets', 'Notes d\'attaque']
 
@@ -520,6 +521,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
   })
   const [editCueText, setEditCueText] = useState(song.cueText || '')
   const [editCueSize, setEditCueSize] = useState(song.cueTextSize || 'base')
+  const [editMultiTrackOff, setEditMultiTrackOff] = useState(song.multiTrackDisabled === true)
   const updateSong = useStore((s) => s.updateSong)
   const updateButtonLabel = useStore((s) => s.updateButtonLabel)
   const toggleHiddenPupitre = useStore((s) => s.toggleHiddenPupitre)
@@ -562,6 +564,8 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
       attackNotes,
       cueText: editCueText,
       cueTextSize: editCueSize,
+      // Réglage admin : champ écrit uniquement par un admin (booléen explicite, jamais undefined → Firestore)
+      ...(canAdmin ? { multiTrackDisabled: editMultiTrackOff } : {}),
     })
     setEditing(false)
   }
@@ -625,6 +629,26 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                 type="number"
                 className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-900 dark:border-gray-700"
               />
+              {/* Synchronisation multi-pistes (admin uniquement) */}
+              {canAdmin && (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={editMultiTrackOff}
+                      onChange={(e) => setEditMultiTrackOff(e.target.checked)}
+                      className="accent-blue-600 flex-shrink-0 w-4 h-4"
+                    />
+                    <span>Synchronisation multi-pistes désactivée</span>
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1 pl-6">
+                    Un seul fichier est joué à la fois. Plusieurs voix sélectionnées → bouton « Tutti ».
+                  </p>
+                  {editMultiTrackOff && !findTuttiButton(song) && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 pl-6">
+                      Aucun bouton « Tutti » sur ce chant : le meilleur fichier unique sera joué.
+                    </p>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-gray-500 mt-1">Boutons actifs &amp; noms <span className="text-gray-400">(décocher pour masquer)</span></p>
               <div className="grid grid-cols-2 gap-2">
                 {PUPITRES.map((p) => {
