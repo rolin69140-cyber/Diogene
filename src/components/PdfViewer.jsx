@@ -45,6 +45,8 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '', o
   const containerRef   = useRef(null)
   const renderTasksRef = useRef([])
   const pdfDocRef      = useRef(null)
+  const renderGenRef   = useRef(0)     // n° de la passe de rendu courante : une passe récente annule les précédentes
+  const drawnZoomRef   = useRef(null)  // zoom avec lequel le document a été dessiné en dernier
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
   const [pages,   setPages]   = useState(0)
@@ -73,14 +75,22 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '', o
         const pdf = await loadingTask.promise
         if (cancelled) { loadingTask.destroy?.(); return }
 
+        // Passe de rendu initiale. drawnZoomRef est posé AVANT setLoading(false) : l'effet de zoom
+        // (déclenché par ce changement de `loading`) sait ainsi que le document est déjà dessiné
+        // et ne lance pas une 2e boucle en parallèle (pages dessinées en double).
+        const gen = ++renderGenRef.current
+        const isStale = () => cancelled || gen !== renderGenRef.current
+        drawnZoomRef.current = zoom
         pdfDocRef.current = pdf
         setPages(pdf.numPages)
         setLoading(false)
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          if (cancelled) break
-          await renderPage(pdf, pageNum, zoom, containerRef.current, renderTasksRef, cancelled)
+          if (isStale()) break
+          await renderPage(pdf, pageNum, zoom, containerRef.current, renderTasksRef, isStale)
         }
+        // Même signal de fin de rendu qu'après un changement de zoom (double RAF)
+        if (!isStale()) requestAnimationFrame(() => requestAnimationFrame(() => onRenderComplete?.()))
       } catch (e) {
         if (!cancelled) {
           console.warn('[PdfViewer] erreur chargement:', e?.message || e)
@@ -102,19 +112,24 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '', o
   useEffect(() => {
     const pdf = pdfDocRef.current
     if (!pdf || loading) return
+    // Déjà dessiné à ce zoom (cas du passage loading → false après la passe initiale) : rien à refaire
+    if (drawnZoomRef.current === zoom) return
+    drawnZoomRef.current = zoom
     let cancelled = false
+    const gen = ++renderGenRef.current   // rend « périmée » toute passe de rendu encore en cours
+    const isStale = () => cancelled || gen !== renderGenRef.current
 
     ;(async () => {
       for (const t of renderTasksRef.current) { try { t.cancel() } catch {} }
       renderTasksRef.current = []
       if (containerRef.current) containerRef.current.innerHTML = ''
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        if (cancelled) break
-        await renderPage(pdf, pageNum, zoom, containerRef.current, renderTasksRef, cancelled)
+        if (isStale()) break
+        await renderPage(pdf, pageNum, zoom, containerRef.current, renderTasksRef, isStale)
       }
       // Double RAF : attend que le browser ait peint les nouveaux canvases
       // avant de signaler la fin du rendu (évite le flash lors du reset transform)
-      if (!cancelled) requestAnimationFrame(() => requestAnimationFrame(() => onRenderComplete?.()))
+      if (!isStale()) requestAnimationFrame(() => requestAnimationFrame(() => onRenderComplete?.()))
     })()
 
     return () => { cancelled = true }
@@ -154,11 +169,12 @@ export default function PdfViewer({ url, zoom = 1, className = '', label = '', o
 }
 
 // ── Rendu d'une page ──────────────────────────────────────────────────────────
-async function renderPage(pdf, pageNum, zoom, container, renderTasksRef, cancelled) {
-  if (!container || cancelled) return
+// isCancelled : fonction (réévaluée après chaque await — une passe périmée n'ajoute plus de canvas)
+async function renderPage(pdf, pageNum, zoom, container, renderTasksRef, isCancelled) {
+  if (!container || isCancelled()) return
   try {
     const page     = await pdf.getPage(pageNum)
-    if (cancelled) return
+    if (isCancelled()) return
     const viewport = page.getViewport({ scale: 1 })
     const containerWidth = container.clientWidth || 320
     const scale    = (containerWidth / viewport.width) * (zoom || 1) * (window.devicePixelRatio || 1)
