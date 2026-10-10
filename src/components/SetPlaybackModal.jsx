@@ -12,6 +12,7 @@ import { getAudioFile } from '../store/index'
 import useStore from '../store/index'
 import { detectOnset } from '../lib/detectOnset'
 import useWakeLock from '../hooks/useWakeLock'
+import { isMultiTrackDisabled, isTuttiButton, findTuttiButton, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
 
 const Paroles = lazy(() => import('./Paroles'))
 
@@ -96,6 +97,18 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
       const allBtns = song?.audioButtons || []
       const btn     = allBtns.find((b) => b.id === btnId)
       if (!btn) return { ...m, [songId]: [...current, btnId] }
+
+      // Chant à synchro multi-pistes désactivée : une seule piste à la fois.
+      // Plusieurs voix → bouton « Tutti » (à défaut, la dernière piste cliquée).
+      if (isMultiTrackDisabled(song)) {
+        const hasOtherVocal = current.some((id) => {
+          const existing = allBtns.find((b) => b.id === id)
+          return existing && !isInstrumental(existing) && !isTuttiButton(existing)
+        })
+        const tutti  = findTuttiButton(song)
+        const single = !isInstrumental(btn) && hasOtherVocal && tutti ? tutti.id : btnId
+        return { ...m, [songId]: [single] }
+      }
 
       let next
       if (isInstrumental(btn)) {
@@ -182,6 +195,19 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
     const selectedBtns = (song.audioButtons || []).filter((b) => selectedIds.includes(b.id))
 
     if (selectedBtns.length === 0) {
+      // Chant sans aucun audio mais avec paroles/PDF : on affiche le PDF (pas de popup « sans piste »)
+      if (!(song.audioButtons || []).length && songHasLyrics(song)) {
+        const a = audioRef.current
+        if (a) { a.pause(); a.currentTime = 0 }
+        setCurrentIdx(idx)
+        idxRef.current = idx
+        setElapsed(0)
+        setDuration(0)
+        setIsPlaying(false)
+        playingRef.current = false
+        setPdfOpen({ songId: song.id, pdfId: getSongPdfs(song)[0]?.id ?? null })
+        return
+      }
       setNoTrackSong(song.name)
       setIsPlaying(false)
       playingRef.current = false
@@ -462,8 +488,13 @@ export default function SetPlaybackModal({ set, songs, userPupitre, onClose }) {
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1.5">
                   <span className="text-gray-400 mr-1">{i + 1}.</span> {song.name}
                 </p>
+                {isMultiTrackDisabled(song) && btns.length > 0 && (
+                  <p className="text-[11px] text-gray-400 -mt-1 mb-1.5">Une seule piste à la fois (plusieurs voix → Tutti)</p>
+                )}
                 {btns.length === 0 ? (
-                  <p className="text-xs text-red-400">Aucune piste audio</p>
+                  songHasLyrics(song)
+                    ? <p className="text-xs text-gray-400">📄 Paroles / PDF uniquement</p>
+                    : <p className="text-xs text-red-400">Aucune piste audio</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {btns.map((btn) => {

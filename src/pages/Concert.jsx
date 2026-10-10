@@ -9,6 +9,7 @@ import DirectorNotesModal from '../components/DirectorNotesModal'
 import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
 import useDirectorNotes from '../hooks/useDirectorNotes'
+import { resolveSingleTrack, isMultiTrackDisabled, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -150,6 +151,9 @@ export default function Concert() {
   // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!currentSong?.audioButtons?.length || !selected.length) return []
+    // Chant à synchro multi-pistes désactivée : une seule piste (Tutti, sinon meilleur fichier)
+    const single = resolveSingleTrack(currentSong, selected, findBestButton)
+    if (single) return single
     const monoButtons = selected.map((p) => {
       // 1. Match exact sur pupitres
       const exact = currentSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
@@ -313,7 +317,9 @@ export default function Concert() {
                 ▶ <span className="text-xs opacity-90 truncate">
                   {instBtnId
                     ? (selectedInst?.label || 'Instrument')
-                    : voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}
+                    : isMultiTrackDisabled(currentSong) && bestBtn
+                      ? bestBtn.label
+                      : voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}
                 </span>
               </button>
             )}
@@ -356,6 +362,16 @@ export default function Concert() {
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
               )}
             </button>
+            {/* Paroles/PDF — chants sans audio uniquement (les autres l'ont dans le lecteur) */}
+            {!currentSong.audioButtons?.length && songHasLyrics(currentSong) && (
+              <button
+                onClick={() => openLyrics(currentSong.id, getSongPdfs(currentSong)[0]?.id)}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 active:opacity-70 transition-opacity"
+                title="Paroles / PDF"
+              >
+                📄 Paroles
+              </button>
+            )}
           </div>
           {/* Preview inline si contenu */}
           {currentSong.notes?.trim() && (

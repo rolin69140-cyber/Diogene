@@ -10,6 +10,7 @@ import SetPlaybackModal from '../components/SetPlaybackModal'
 import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
 import useDirectorNotes from '../hooks/useDirectorNotes'
+import { resolveSingleTrack, isMultiTrackDisabled, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -36,6 +37,7 @@ export default function Repetition() {
   const activeSongId = useStore((s) => s.activeSongId)
   const setActiveSong = useStore((s) => s.setActiveSong)
   const openPlayer = useStore((s) => s.openPlayer)
+  const openLyrics = useStore((s) => s.openLyrics)
   const playerState = useStore((s) => s.playerState)
   const lyricsState = useStore((s) => s.lyricsState)
   const closePlayer = useStore((s) => s.closePlayer)
@@ -157,6 +159,9 @@ export default function Repetition() {
   // Les pistes instrumentales (pupitres:[]) sont sélectionnables séparément, jamais combinées avec les voix.
   const findBestButtons = (selected) => {
     if (!activeSong?.audioButtons?.length || !selected.length) return []
+    // Chant à synchro multi-pistes désactivée : une seule piste (Tutti, sinon meilleur fichier)
+    const single = resolveSingleTrack(activeSong, selected, findBestButton)
+    if (single) return single
     const monoButtons = selected.map((p) => {
       // 1. Match exact sur pupitres
       const exact = activeSong.audioButtons.find((b) => b.pupitres?.length === 1 && b.pupitres[0] === p)
@@ -312,7 +317,9 @@ export default function Repetition() {
                 ▶ <span className="text-xs opacity-90 truncate">
                   {instBtnId
                     ? (selectedInst?.label || 'Instrument')
-                    : voiceFilter.map((p) => activeSong?.buttonLabels?.[p] || p).join('+')}
+                    : isMultiTrackDisabled(activeSong) && bestBtn
+                      ? bestBtn.label
+                      : voiceFilter.map((p) => activeSong?.buttonLabels?.[p] || p).join('+')}
                 </span>
               </button>
             )}
@@ -458,6 +465,14 @@ export default function Repetition() {
                         <span className="absolute top-2 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
                       )}
                     </button>
+                    {/* Bouton paroles/PDF — chants sans audio uniquement (les autres l'ont dans le lecteur) */}
+                    {!song.audioButtons?.length && songHasLyrics(song) && (
+                      <button
+                        onClick={() => openLyrics(song.id, getSongPdfs(song)[0]?.id)}
+                        className="px-2.5 py-3.5 text-gray-400 hover:text-emerald-500 transition-colors"
+                        title="Paroles / PDF"
+                      >📄</button>
+                    )}
                     {/* Bouton retirer du set (visible seulement si un set est actif) */}
                     {activeSet && (
                       <button
