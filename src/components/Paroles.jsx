@@ -235,8 +235,7 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
       try {
         document.documentElement.requestFullscreen()
       } catch (e) {}
-      // screen.orientation.lock uniquement sur Android (iOS : non supporté + effets de bord)
-      try { screen.orientation.lock('landscape').catch(() => {}) } catch (e) {}
+      // Pas de screen.orientation.lock : l'orientation suit celle de l'appareil (portrait ou paysage)
     }
     // iOS Safari : pas de fullscreen API → on reste en fullscreen React uniquement (fixed inset-0)
   }
@@ -252,7 +251,6 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
       try {
         ;(document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
       } catch (e) {}
-      try { screen.orientation.unlock() } catch (e) {}
     }
   }
 
@@ -268,7 +266,6 @@ export default function Paroles({ songId, onClose, initialPdfId }) {
         // L'utilisateur a quitté le fullscreen natif (ex. bouton retour Android)
         fullscreenRef.current = false
         setFullscreen(false)
-        try { screen.orientation.unlock() } catch (e) {}
       }
     }
     document.addEventListener('fullscreenchange', onFsChange)
