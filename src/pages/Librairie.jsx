@@ -4,6 +4,7 @@ import useImportAudio, { PDF_LABELS, PDF_MAX } from '../hooks/useImportAudio'
 import useLibrary from '../hooks/useLibrary'
 import useBgImage from '../hooks/useBgImage'
 import { findTuttiButton } from '../lib/songPlayback'
+import SongMediaBadges from '../components/SongMediaBadges'
 
 const TABS = ['Chants', 'Sets', 'Notes d\'attaque']
 
@@ -1093,6 +1094,7 @@ function SortableSongList({ allSongs, selectedIds, onChange }) {
               >⠿</span>
               <span className="text-xs text-gray-400 w-4 text-right flex-shrink-0">{idx + 1}.</span>
               <span className="flex-1 truncate">{song.name}</span>
+              <SongMediaBadges song={song} />
             </div>
           )
         })}
@@ -1147,7 +1149,8 @@ function NewSetForm({ songs, onSave, onCancel }) {
         {[...songs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
           <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded">
             <input type="checkbox" checked={selectedSongs.includes(s.id)} onChange={() => toggleSong(s.id)} className="accent-blue-600" />
-            {s.name}
+            <span className="flex-1">{s.name}</span>
+            <SongMediaBadges song={s} />
           </label>
         ))}
       </div>
@@ -1454,7 +1457,8 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
         {[...songs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
           <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded">
             <input type="checkbox" checked={selectedSongs.includes(s.id)} onChange={() => toggleSong(s.id)} className="accent-blue-600" />
-            {s.name}
+            <span className="flex-1">{s.name}</span>
+            <SongMediaBadges song={s} />
           </label>
         ))}
       </div>

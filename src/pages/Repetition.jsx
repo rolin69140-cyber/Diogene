@@ -11,6 +11,7 @@ import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
 import useDirectorNotes from '../hooks/useDirectorNotes'
 import { resolveSingleTrack, isMultiTrackDisabled, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
+import SongMediaBadges from '../components/SongMediaBadges'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -428,16 +429,16 @@ export default function Repetition() {
                 {/* Accent bar gauche quand actif */}
                 <div className={`w-1 self-stretch flex-shrink-0 rounded-l-2xl transition-colors ${isActive ? 'bg-blue-500' : 'bg-transparent'}`} />
                 <button
-                  className="flex-1 text-left px-3 py-3.5"
+                  className="flex-1 min-w-0 text-left px-3 py-3.5"
                   onClick={() => {
                     setActiveSong(isActive ? null : song.id)
                   }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`truncate ${isActive ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-gray-800 dark:text-gray-200'}`}>{song.name}</span>
+                    <span className={`min-w-0 truncate ${isActive ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-gray-800 dark:text-gray-200'}`}>{song.name}</span>
                     <div className="flex gap-1.5 items-center flex-shrink-0">
                       {song.bpm && <span className="text-[11px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">{song.bpm}♩</span>}
-                      {song.audioButtons?.length > 0 && <span className="text-[11px] text-gray-400">🔊</span>}
+                      <SongMediaBadges song={song} />
                     </div>
                   </div>
                 </button>

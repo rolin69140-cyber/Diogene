@@ -10,6 +10,7 @@ import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
 import useDirectorNotes from '../hooks/useDirectorNotes'
 import { resolveSingleTrack, isMultiTrackDisabled, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
+import SongMediaBadges from '../components/SongMediaBadges'
 
 const AudioPlayer = lazy(() => import('../components/AudioPlayer'))
 const Paroles = lazy(() => import('../components/Paroles'))
@@ -449,7 +450,7 @@ export default function Concert() {
                   </span>
                   <div className="flex gap-1 items-center">
                     {song.bpm && <span className="text-xs text-gray-400 mr-1">{song.bpm}♩</span>}
-                    {song.audioButtons?.length > 0 && <span className="text-xs text-gray-400">🔊{song.audioButtons.length}</span>}
+                    <SongMediaBadges song={song} />
                   </div>
                 </div>
               </button>
