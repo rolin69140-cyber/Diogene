@@ -44,9 +44,13 @@ export default async function handler(req, res) {
     const contentType   = upstream.headers.get('content-type')   || 'audio/mpeg'
     const contentLength = upstream.headers.get('content-length')
 
+    const contentRange  = upstream.headers.get('content-range')
+
     res.setHeader('Content-Type', contentType)
     res.setHeader('Accept-Ranges', 'bytes')
     if (contentLength) res.setHeader('Content-Length', contentLength)
+    // Une réponse 206 sans Content-Range est invalide : Safari/iOS et Chrome refusent alors de lire le média
+    if (contentRange) res.setHeader('Content-Range', contentRange)
 
     const status = upstream.status === 206 ? 206 : 200
     res.status(status)

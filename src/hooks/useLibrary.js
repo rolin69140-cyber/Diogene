@@ -3,8 +3,6 @@ import useStore from '../store/index'
 import { deleteAudioFile, generateUUID } from '../store/index'
 import {
   deleteSong  as fbDeleteSong,
-  deleteAudioFile as fbDeleteAudio,
-  deletePdfFile   as fbDeletePdf,
   saveSet    as fbSaveSet,
   deleteSet  as fbDeleteSet,
   saveSong   as fbSaveSong,
@@ -32,18 +30,14 @@ export default function useLibrary() {
     if (!song) return
     saveUndo(`Suppression de "${song.name}"`)
 
-    // Supprimer les fichiers audio (local + Firebase Storage)
+    // Copie locale des fichiers audio (cache IndexedDB de cet appareil) uniquement.
+    // Les fichiers de Firebase Storage (audio ET PDF) ne sont volontairement PAS supprimés :
+    // « Annuler » ou une restauration ramène le chant avec ses liens, qui doivent rester valides
+    // (c'est ainsi que les fichiers de « Dernière Marée » avaient disparu).
+    // Le ménage des fichiers orphelins se fait à la main depuis la console Firebase.
     for (const btn of song.audioButtons || []) {
       if (btn.fileId) {
         await deleteAudioFile(btn.fileId).catch(() => {})
-        await fbDeleteAudio(btn.fileId).catch(() => {})
-      }
-    }
-
-    // Supprimer les PDFs (Firebase Storage)
-    for (const pdf of song.pdfFiles || []) {
-      if (pdf.fileId) {
-        await fbDeletePdf(pdf.fileId).catch(() => {})
       }
     }
 

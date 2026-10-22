@@ -908,7 +908,7 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
             </button>
             <button
               onClick={() => withAdmin(() => {
-                if (!window.confirm(`Supprimer "${song.name}" ?\n\nCette action supprime définitivement tous les fichiers audio et PDF associés.`)) return
+                if (!window.confirm(`Supprimer "${song.name}" ?\n\nLe chant est supprimé. Ses fichiers audio et PDF restent stockés sur Firebase (ménage manuel depuis la console Firebase).`)) return
                 onDelete()
               })}
               className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">
