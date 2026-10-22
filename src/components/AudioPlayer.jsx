@@ -5,6 +5,7 @@ import usePianoSynth from '../hooks/usePianoSynth'
 import Metronome from './Metronome'
 import { detectOnset } from '../lib/detectOnset'
 import useWakeLock from '../hooks/useWakeLock'
+import { AUDIO_ERROR_MESSAGES } from '../lib/audioLoadFallback'
 
 const SPEEDS = [0.75, 0.85, 1, 1.1, 1.2]
 const TRANSPOSES = [
@@ -429,10 +430,10 @@ export default function AudioPlayer({ songId, buttonId, buttonIds: buttonIdsProp
           </div>
           <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-700 rounded-xl p-4 text-sm text-orange-800 dark:text-orange-200">
             <p className="font-semibold mb-1">⚠️ Impossible de lire le fichier</p>
-            <p>Le fichier n'a pas pu être chargé sur cet appareil.</p>
-            {button?.storageUrl && (
+            <p>{AUDIO_ERROR_MESSAGES[player.loadErrorKind] || AUDIO_ERROR_MESSAGES.unknown}</p>
+            {(player.fallbackUrl || button?.storageUrl) && !['missing', 'nolink', 'network'].includes(player.loadErrorKind) && (
               <a
-                href={button.storageUrl}
+                href={player.fallbackUrl || button.storageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-3 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium"

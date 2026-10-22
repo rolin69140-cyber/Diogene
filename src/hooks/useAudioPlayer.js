@@ -29,6 +29,8 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { getAudioFile } from '../store/index'
 import * as Tone from 'tone'
 import { registerAudioContext } from '../lib/audioResume'
+import { getAudioUrlChecked } from '../lib/firebaseSync'
+import { audioProxyUrl, diagnoseAudioFailure } from '../lib/audioLoadFallback'
 
 // Reprendre le contexte Tone.js quand l'appli revient au premier plan
 // (visibilitychange / pageshow / focus + fallback au 1er geste, voir audioResume.js)
@@ -42,6 +44,7 @@ export default function useAudioPlayer() {
   const loadedFileIdRef = useRef(null)
   const storageUrlRef   = useRef(null)
   const loadErrorRef    = useRef(false)
+  const loadSeqRef      = useRef(0)   // n° du chargement en cours : les plans B d'un ancien chargement s'arrêtent
 
   // ── Tone.js PitchShift ────────────────────────────────────────────────────
   const pitchShiftRef = useRef(null)   // Tone.PitchShift — créé à la 1re transposition
@@ -73,6 +76,8 @@ export default function useAudioPlayer() {
 
   // ── État React ────────────────────────────────────────────────────────────
   const [loadError,    setLoadError]    = useState(false)
+  const [loadErrorKind, setLoadErrorKind] = useState(null)   // cause : voir AUDIO_ERROR_MESSAGES
+  const [fallbackUrl,  setFallbackUrl]  = useState(null)     // lien frais trouvé par le plan B (pour « Ouvrir dans le navigateur »)
   const [isPlaying,    setIsPlaying]    = useState(false)
   const [duration,     setDuration]     = useState(0)
   const [currentTime,  setCurrentTime]  = useState(0)
@@ -241,6 +246,9 @@ export default function useAudioPlayer() {
     isPlayingRef.current = false
     setLoadError(false)
     loadErrorRef.current = false
+    setLoadErrorKind(null)
+    setFallbackUrl(null)
+    const seq = ++loadSeqRef.current
 
     // Réinitialiser le mode AudioBuffer
     bufferReadyRef.current    = false
@@ -291,6 +299,60 @@ export default function useAudioPlayer() {
     } else if (storageUrl) {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
 
+      // ── Plan B si le chargement échoue (iOS comme Android) ────────────────
+      // 1) lien frais demandé à Firebase (si différent du lien enregistré)
+      // 2) relais Vercel /api/audio-proxy
+      // 3) diagnostic de la cause → message précis (loadErrorKind)
+      // Seules les erreurs du chargement initial sont concernées : dès que les métadonnées
+      // arrivent, on retrouve le comportement d'origine (une erreur ultérieure = loadError).
+      const attachFailover = () => {
+        const alive = () => seq === loadSeqRef.current
+        let stage = 0, busy = false, fresh = null
+        const fail = (kind) => {
+          audio.removeEventListener('error', onError)
+          setLoadErrorKind(kind); setLoadError(true); loadErrorRef.current = true
+        }
+        const onLoaded = () => {
+          audio.removeEventListener('error', onError)
+          if (!alive()) return
+          audio.addEventListener('error', () => {
+            if (!alive()) return
+            console.error('[Audio] erreur après chargement, code:', audio.error?.code)
+            setLoadErrorKind('unknown'); setLoadError(true); loadErrorRef.current = true
+          }, { once: true })
+        }
+        const onError = async () => {
+          if (!alive()) { audio.removeEventListener('error', onError); return }
+          if (busy) return
+          busy = true
+          try {
+            console.error('[Audio] erreur chargement URL (étape ' + stage + '), code:', audio.error?.code)
+            stage++
+            if (stage === 1) {
+              fresh = await getAudioUrlChecked(fileId)
+              if (!alive()) return
+              if (fresh.error === 'not-found') { fail('missing'); return }
+              if (fresh.url && fresh.url !== storageUrl) {
+                console.log('[Audio] lien enregistré périmé → lien frais Firebase')
+                storageUrlRef.current = fresh.url
+                setFallbackUrl(fresh.url)
+                audio.src = fresh.url; audio.load()
+                return
+              }
+              stage = 2   // même lien : inutile de le réessayer, on passe au relais
+            }
+            if (stage === 2) {
+              console.log('[Audio] chargement direct impossible → relais /api/audio-proxy')
+              audio.src = audioProxyUrl(fresh?.url || storageUrl); audio.load()
+              return
+            }
+            fail(await diagnoseAudioFailure(fresh, fresh?.url || storageUrl))
+          } finally { busy = false }
+        }
+        audio.addEventListener('error', onError)
+        audio.addEventListener('loadedmetadata', onLoaded, { once: true })
+      }
+
       if (isIOS) {
         // ── iOS Safari : URL directe ─────────────────────────────────────────
         console.log('[Audio] iOS — URL directe:', storageUrl)
@@ -307,10 +369,7 @@ export default function useAudioPlayer() {
         }
         audio.addEventListener('loadedmetadata', onMeta, { once: true })
         audio.addEventListener('durationchange',  onMeta, { once: true })
-        audio.addEventListener('error', () => {
-          console.error('[Audio] iOS erreur chargement URL:', audio.error?.code)
-          setLoadError(true); loadErrorRef.current = true
-        }, { once: true })
+        attachFailover()
 
       } else {
         // ── Android / Desktop : URL directe ──────────────────────────────────
@@ -331,14 +390,14 @@ export default function useAudioPlayer() {
             const dur = audio.duration
             if (dur && isFinite(dur)) { setDuration(dur); setSegmentEnd(dur); segEndRef.current = dur }
           }, { once: true })
-          audio.addEventListener('error', () => {
-            console.error('[Audio] Android erreur URL:', audio.error?.code)
-            setLoadError(true); loadErrorRef.current = true; resolve()
-          }, { once: true })
+          attachFailover()
+          audio.addEventListener('error', () => resolve(), { once: true })   // ne pas attendre 3 s ; le plan B continue en arrière-plan
           setTimeout(resolve, 3000)
         })
       }
     } else {
+      // Ni copie locale ni lien serveur : le fichier n'existe que sur l'appareil qui l'a importé
+      setLoadErrorKind('nolink')
       setLoadError(true); loadErrorRef.current = true
       return false
     }
@@ -884,7 +943,7 @@ export default function useAudioPlayer() {
 
   return {
     isPlaying, duration, currentTime, loop, speed, transpose,
-    segmentStart, segmentEnd, loadError,
+    segmentStart, segmentEnd, loadError, loadErrorKind, fallbackUrl,
     loadFile, play, pause, seek, resetToSegmentStart,
     changeSpeed, changeTranspose, toggleLoop,
     setSegment, resetSegment, getCurrentTime,

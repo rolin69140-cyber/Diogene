@@ -276,6 +276,29 @@ export async function getAudioUrl(fileId) {
 }
 
 /**
+ * Comme getAudioUrl, mais indique POURQUOI il n'y a pas d'URL :
+ *   { url, error: null }                      → lien actuel du fichier
+ *   { url: null, error: 'not-found' }         → le fichier n'existe pas dans Storage
+ *   { url: null, error: 'unauthorized' }      → accès refusé (règles Storage)
+ *   { url: null, error: 'quota' }             → quota Firebase dépassé
+ *   { url: null, error: 'other' | 'unavailable' } → réseau / Firebase indisponible
+ */
+export async function getAudioUrlChecked(fileId) {
+  if (!FIREBASE_ENABLED || !storage) return { url: null, error: 'unavailable' }
+  try {
+    return { url: await getDownloadURL(ref(storage, `audio/${fileId}`)), error: null }
+  } catch (e) {
+    const code = e?.code || ''
+    const error =
+      code === 'storage/object-not-found' ? 'not-found'
+      : code === 'storage/unauthorized' || code === 'storage/unauthenticated' ? 'unauthorized'
+      : code === 'storage/quota-exceeded' ? 'quota'
+      : 'other'
+    return { url: null, error }
+  }
+}
+
+/**
  * Récupère l'URL de téléchargement d'un PDF.
  */
 export async function getPdfUrl(fileId) {
