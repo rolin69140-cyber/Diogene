@@ -696,7 +696,6 @@ const useStore = create(
         // ── Super admin : directorPin (Firebase) ou VITE_ADMIN_PIN (fallback) ──
         const adminEnvPin = import.meta.env.VITE_ADMIN_PIN || ''
         const superPin = directorPin || adminEnvPin
-        console.log('[unlockDirector] pin saisi:', JSON.stringify(pin), '| directorPin Firebase:', JSON.stringify(directorPin), '| VITE_ADMIN_PIN:', JSON.stringify(adminEnvPin), '| superPin effectif:', JSON.stringify(superPin))
         if (superPin && pin === superPin) {
           set({ directorUnlocked: true, unlockedAs: null, lastUnlockInfo: null, adminUnlocked: true })
           get().updateSettings({ unlockedCodeVersion: pin })
