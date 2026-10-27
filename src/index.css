@@ -61,3 +61,20 @@ input[type="search"]::-webkit-search-cancel-button {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Boutons de notes d'attaque (Concert / Répétition) : toujours sur une seule ligne.
+   La cellule garde la taille choisie (--atk-max) tant que la place suffit, puis rétrécit ;
+   le bouton reste carré et sa police suit la largeur de la cellule (unités cqw) pour que
+   le libellé ne déborde pas. --atk-fs = police d'origine, --atk-lw = longueur du plus long mot. */
+.atk-cell {
+  container-type: inline-size;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--atk-max);
+}
+.atk-btn {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0 2px;
+  font-size: min(var(--atk-fs), calc((100cqw - 6px) / (var(--atk-lw) * 0.62)));
+}

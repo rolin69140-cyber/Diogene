@@ -72,7 +72,12 @@ export default function Concert() {
   const { notes: directorNotesText } = useDirectorNotes(currentSong?.name)
 
   const buttonSize = settings.buttonSize || 'normal'
-  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
+  const sizePx = buttonSize === 'tres-grand' ? 96 : buttonSize === 'grand' ? 80 : 64
+  // Boutons B/A/S/T (+ 5e voix si elle a un libellé) : une seule ligne, quel que soit leur nombre
+  const attackPupitres = [
+    ...PUPITRES_CONFIG,
+    ...(currentSong?.buttonLabels?.['5'] ? [{ p: '5', label: currentSong.buttonLabels['5'], color: '#7C3AED' }] : [])
+  ].filter(({ p }) => !(currentSong?.hiddenPupitres || []).includes(p))
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
   const hiddenPupitres = currentSong?.hiddenPupitres || []
@@ -236,12 +241,8 @@ export default function Concert() {
 
       {/* ── Panneau BAST (identique à Répétition) ── */}
       <div className="px-4 py-4 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex justify-center gap-4 flex-wrap">
-          {[
-            ...PUPITRES_CONFIG,
-            ...(currentSong?.buttonLabels?.['5'] ? [{ p: '5', label: currentSong.buttonLabels['5'], color: '#7C3AED' }] : [])
-          ].filter(({ p }) => !(currentSong?.hiddenPupitres || []).includes(p))
-          .map(({ p, color }) => {
+        <div className={`flex justify-center ${attackPupitres.length > 4 ? 'gap-2' : 'gap-4'} flex-nowrap`}>
+          {attackPupitres.map(({ p, color }) => {
             const isMine = p === settings.pupitre
             const customLabel = currentSong?.buttonLabels?.[p]
             const attackNotes = currentSong?.attackNotes?.[p]
@@ -259,10 +260,10 @@ export default function Concert() {
             const hint = currentSong?.buttonHints?.[p]
 
             return (
-              <div key={p} className="relative flex flex-col items-center gap-1">
+              <div key={p} className="atk-cell relative flex flex-col items-center gap-1" style={{ '--atk-max': `${sizePx}px` }}>
                 <button
-                  style={{ backgroundColor: color, fontSize: btnFontSize, lineHeight: 1.2 }}
-                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
+                  style={{ backgroundColor: color, '--atk-fs': `${btnFontSize}px`, '--atk-lw': Math.max(2, ...btnLabel.split(/\s+/).map((w) => w.length)), lineHeight: 1.2 }}
+                  className={`atk-btn rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
 

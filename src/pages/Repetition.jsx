@@ -65,7 +65,13 @@ export default function Repetition() {
   const activeSong = songs.find((s) => s.id === activeSongId)
   const { notes: directorNotesText } = useDirectorNotes(activeSong?.name)
   const buttonSize = settings.buttonSize || 'normal'
-  const sizeClass = buttonSize === 'tres-grand' ? 'w-24 h-24' : buttonSize === 'grand' ? 'w-20 h-20' : 'w-16 h-16'
+  const sizePx = buttonSize === 'tres-grand' ? 96 : buttonSize === 'grand' ? 80 : 64
+  // Boutons B/A/S/T (+ 5e voix si elle a un libellé) : une seule ligne, quel que soit leur nombre
+  const attackPupitres = [
+    ...PUPITRES_CONFIG,
+    // 5e voix — affichée uniquement si un label est défini sur le chant actif
+    ...(activeSong?.buttonLabels?.['5'] ? [{ p: '5', label: activeSong.buttonLabels['5'], color: '#7C3AED' }] : [])
+  ].filter(({ p }) => !(activeSong?.hiddenPupitres || []).includes(p))
   const baseFontSize = buttonSize === 'tres-grand' ? 30 : buttonSize === 'grand' ? 24 : 20
 
   const activeSet = sets.find((s) => s.id === activeSetId)
@@ -232,13 +238,8 @@ export default function Repetition() {
 
       {/* 4 boutons B/A/S/T + 5e voix optionnelle */}
       <div className="px-4 py-5 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex justify-center gap-4 flex-wrap">
-          {[
-            ...PUPITRES_CONFIG,
-            // 5e voix — affichée uniquement si un label est défini sur le chant actif
-            ...(activeSong?.buttonLabels?.['5'] ? [{ p: '5', label: activeSong.buttonLabels['5'], color: '#7C3AED' }] : [])
-          ].filter(({ p }) => !(activeSong?.hiddenPupitres || []).includes(p))
-          .map(({ p, label, color }) => {
+        <div className={`flex justify-center ${attackPupitres.length > 4 ? 'gap-2' : 'gap-4'} flex-nowrap`}>
+          {attackPupitres.map(({ p, label, color }) => {
             const isMine = p === settings.pupitre
             const customLabel = activeSong?.buttonLabels?.[p]
             const displayLabel = isMine ? 'Ma voix' : (customLabel || p)
@@ -254,11 +255,11 @@ export default function Repetition() {
             const hint = activeSong?.buttonHints?.[p]
 
             return (
-              <div key={p} className="relative flex flex-col items-center">
+              <div key={p} className="atk-cell relative flex flex-col items-center" style={{ '--atk-max': `${sizePx}px` }}>
                 {/* Bouton principal — tap = note courte, maintenir = note tenue */}
                 <button
-                  style={{ backgroundColor: color, fontSize: displayLabel.length > 6 ? Math.min(13, baseFontSize) : displayLabel.length > 4 ? Math.min(16, baseFontSize) : displayLabel.length > 2 ? Math.min(18, baseFontSize) : baseFontSize, lineHeight: 1.2 }}
-                  className={`${sizeClass} rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
+                  style={{ backgroundColor: color, '--atk-fs': `${displayLabel.length > 6 ? Math.min(13, baseFontSize) : displayLabel.length > 4 ? Math.min(16, baseFontSize) : displayLabel.length > 2 ? Math.min(18, baseFontSize) : baseFontSize}px`, '--atk-lw': Math.max(2, ...displayLabel.split(/\s+/).map((w) => w.length)), lineHeight: 1.2 }}
+                  className={`atk-btn rounded-2xl text-white font-bold shadow-lg active:scale-95 transition-transform relative`}
                   onPointerDown={(e) => {
                     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
                     const freqs = notes.map(noteStrToFreq).filter(Boolean)
