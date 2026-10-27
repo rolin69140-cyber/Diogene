@@ -195,6 +195,12 @@ export default function Concert() {
     ? [selectedInst]
     : findBestButtons(voiceFilter.filter((p) => availablePupitres.includes(p)))
   const bestBtn  = bestBtns[0] ?? null   // rétrocompat pour les usages existants
+  // Libellé (accessibilité / infobulle) du bouton ▶ : il n'affiche que l'icône pour tenir sur la ligne des voix
+  const playLabel = instBtnId
+    ? (selectedInst?.label || 'Instrument')
+    : isMultiTrackDisabled(currentSong) && bestBtn
+      ? bestBtn.label
+      : voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')
 
   const goToSong = (idx) => {
     const clampedIdx = Math.max(0, Math.min(setSongs.length - 1, idx))
@@ -278,14 +284,14 @@ export default function Concert() {
 
         {/* Filtre voix + instrument + bouton lecture */}
         {currentSong && (availablePupitres.length > 0 || instrumentalBtns.length > 0) && (
-          <div className="mt-4 flex items-center gap-2 flex-wrap justify-center w-full">
+          <div className="mt-4 flex items-center gap-1.5 flex-wrap justify-center w-full">
             {availablePupitres.map((p) => {
               const cfg = PUPITRES_CONFIG.find((c) => c.p === p) || { color: p === '5' ? '#7C3AED' : '#888888' }
               const checked = voiceFilter.includes(p)
               const pillLabel = p === settings.pupitre ? '★' : (currentSong?.buttonLabels?.[p] || p)
               return (
                 <button key={p} onClick={() => toggleVoice(p)}
-                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'opacity-40'}`}
+                  className={`min-w-[2.25rem] h-10 px-1.5 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent' : 'opacity-40'}`}
                   style={checked
                     ? { backgroundColor: cfg.color, borderColor: 'transparent' }
                     : { backgroundColor: 'transparent', color: cfg.color, borderColor: cfg.color }}>
@@ -299,7 +305,7 @@ export default function Concert() {
                 <button
                   key={btn.id}
                   onClick={() => toggleInst(btn.id)}
-                  className={`min-w-[2.5rem] h-10 px-2 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent bg-gray-600' : 'bg-transparent opacity-40 text-gray-500 border-gray-400'}`}
+                  className={`min-w-[2.25rem] h-10 px-1.5 rounded-xl font-bold text-sm border-2 transition-all ${checked ? 'text-white border-transparent bg-gray-600' : 'bg-transparent opacity-40 text-gray-500 border-gray-400'}`}
                 >
                   {btn.label}
                 </button>
@@ -308,20 +314,18 @@ export default function Concert() {
             {availablePupitres.length > 0 && (
               <button
                 onClick={() => { setInstBtnId(null); setVoiceFilter(voiceFilter.length === availablePupitres.length && !instBtnId ? [] : availablePupitres) }}
-                className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
+                className="text-xs px-1.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500">
                 {voiceFilter.length === availablePupitres.length && !instBtnId ? 'Aucun' : 'Tous'}
               </button>
             )}
             {bestBtns.length > 0 && (voiceFilter.length > 0 || instBtnId) && (
-              <button onClick={() => openPlayer(currentSong.id, bestBtns.map((b) => b.id))}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold shadow active:scale-95 transition-transform max-w-full">
-                ▶ <span className="text-xs opacity-90 truncate">
-                  {instBtnId
-                    ? (selectedInst?.label || 'Instrument')
-                    : isMultiTrackDisabled(currentSong) && bestBtn
-                      ? bestBtn.label
-                      : voiceFilter.map((p) => currentSong?.buttonLabels?.[p] || p).join('+')}
-                </span>
+              <button
+                onClick={() => openPlayer(currentSong.id, bestBtns.map((b) => b.id))}
+                aria-label={`Lire : ${playLabel}`}
+                title={`Lire : ${playLabel}`}
+                className="flex items-center justify-center w-10 h-10 shrink-0 bg-blue-600 text-white rounded-xl shadow active:scale-95 transition-transform"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
               </button>
             )}
           </div>
