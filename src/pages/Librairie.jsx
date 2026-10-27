@@ -54,13 +54,18 @@ function ChantsTab() {
   const adminUnlocked     = useStore((s) => s.adminUnlocked)
   const directorUnlocked  = useStore((s) => s.directorUnlocked)
   const unlockAdmin       = useStore((s) => s.unlockAdmin)
+  const unlockDirectorFn  = useStore((s) => s.unlockDirector)
+  const directorPinCfg    = useStore((s) => s.directorPin)
+  const directorCodesCfg  = useStore((s) => s.directorCodes)
   const [adminPinPending, setAdminPinPending] = useState(null)
+  const [adminPinLevel, setAdminPinLevel]     = useState('admin')   // 'admin' | 'director' : qui peut déverrouiller
   const [adminPinInput, setAdminPinInput]     = useState('')
   const [adminPinError, setAdminPinError]     = useState(false)
 
   const withAdmin = (fn) => {
     if (adminUnlocked || !import.meta.env.VITE_ADMIN_PIN) { fn(); return }
     setAdminPinPending(() => fn)
+    setAdminPinLevel('admin')
     setAdminPinInput('')
     setAdminPinError(false)
   }
@@ -69,11 +74,17 @@ function ChantsTab() {
   const withDirector = (fn) => {
     if (directorUnlocked || adminUnlocked || !import.meta.env.VITE_ADMIN_PIN) { fn(); return }
     setAdminPinPending(() => fn)
+    setAdminPinLevel('director')
     setAdminPinInput('')
     setAdminPinError(false)
   }
   const handleAdminPinSubmit = () => {
-    if (unlockAdmin(adminPinInput)) {
+    // Action « chef de chœur » : le code admin OU un code chef de chœur est accepté.
+    // (unlockDirector sans aucun code configuré accepterait n'importe quoi : on ne l'appelle que si des codes existent)
+    const directorConfigured = !!directorPinCfg || directorCodesCfg.length > 0
+    const ok = unlockAdmin(adminPinInput) ||
+      (adminPinLevel === 'director' && directorConfigured && unlockDirectorFn(adminPinInput))
+    if (ok) {
       setAdminPinError(false)
       const fn = adminPinPending
       setAdminPinPending(null)
@@ -223,7 +234,7 @@ function ChantsTab() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 max-w-xs w-full text-center">
             <div className="text-2xl mb-2">🔐</div>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-4">
-              Code administrateur requis
+              {adminPinLevel === 'director' ? 'Code chef de chœur ou administrateur requis' : 'Code administrateur requis'}
             </p>
             <input
               type="password"
