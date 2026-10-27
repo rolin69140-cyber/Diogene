@@ -20,10 +20,10 @@ export default function ChangeCodeModal() {
   const [error, setError]       = useState('')
   const [saving, setSaving]     = useState(false)
 
-  // Ne rien afficher si non concerné
-  if (!directorUnlocked || !lastUnlockInfo?.isTemp) return null
-
-  const { codeId, name } = lastUnlockInfo
+  // Les hooks doivent TOUJOURS être appelés dans le même ordre : le « return null » de
+  // « non concerné » est placé après le dernier hook (sinon React plante dès qu'un code provisoire
+  // déverrouille : « Rendered more hooks than during the previous render »).
+  const { codeId, name } = lastUnlockInfo || {}
 
   const handleSave = useCallback(async () => {
     const pin = newPin.trim()
@@ -49,6 +49,9 @@ export default function ChangeCodeModal() {
     await recordDirectorLogin(codeId, true)
     clearLastUnlockInfo()
   }, [codeId, clearLastUnlockInfo])
+
+  // Ne rien afficher si non concerné
+  if (!directorUnlocked || !lastUnlockInfo?.isTemp) return null
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4">
