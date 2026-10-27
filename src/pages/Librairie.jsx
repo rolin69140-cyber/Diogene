@@ -6,6 +6,8 @@ import useBgImage from '../hooks/useBgImage'
 import { findTuttiButton } from '../lib/songPlayback'
 import SongMediaBadges from '../components/SongMediaBadges'
 import { attackNoteStatus } from '../lib/attackSynth'
+import { uploadSetPlan, checkPlanFile } from '../lib/setPlan'
+import useAdminPinGate from '../components/AdminPinGate'
 
 // Bordure d'une case « note d'attaque » : rouge = note non reconnue (muette), ambre = octave absente (jouée en octave par défaut)
 const noteBorder = (v) => {
@@ -996,6 +998,15 @@ function SetsTab() {
   const [showArchives, setShowArchives] = useState(false)
 
   const setArrangement = useStore((s) => s.setArrangement)
+  const { withAdmin, pinModal } = useAdminPinGate()
+
+  // Plan de concert : n'attend que l'envoi du PDF (jamais la réponse de Firestore, qui n'arrive pas hors ligne).
+  // Renvoie une promesse seulement s'il y a un PDF à envoyer ; en cas d'échec le set n'est pas enregistré.
+  const applyWithPlan = (data, apply) => {
+    const { planFile, planRemoved, ...rest } = data
+    if (planFile) return uploadSetPlan(planFile).then((planPdf) => apply({ ...rest, planPdf }))
+    apply(planRemoved ? { ...rest, planPdf: null } : rest)
+  }
 
   // Séparation actifs / archivés (visibles par le créateur ou publics)
   const visibleSets = sets.filter((s) =>
@@ -1010,6 +1021,8 @@ function SetsTab() {
     songs,
     onDelete: () => deleteSet(set.id),
     onUpdate: (u) => updateSet(set.id, u),
+    onSaveEdit: (data) => applyWithPlan(data, (d) => updateSet(set.id, d)),
+    withAdmin,
     onSetArrangement: (songId, text) => setArrangement(set.id, songId, text),
   })
 
@@ -1025,7 +1038,8 @@ function SetsTab() {
       {showForm && (
         <NewSetForm
           songs={songs}
-          onSave={(data) => { addSet(data); setShowForm(false) }}
+          withAdmin={withAdmin}
+          onSave={(data) => applyWithPlan(data, (d) => { addSet(d); setShowForm(false) })}
           onCancel={() => setShowForm(false)}
         />
       )}
@@ -1054,6 +1068,47 @@ function SetsTab() {
           )}
         </div>
       )}
+      {pinModal}
+    </div>
+  )
+}
+
+// ─── Plan de concert (PDF du set) : ligne des formulaires « Nouveau set » / « Modifier le set » ───────────
+// L'ajout / le remplacement / le retrait demandent le code administrateur. Le fichier n'est envoyé qu'à l'enregistrement du set.
+function SetPlanField({ current, file, removed, onFile, onRemove, withAdmin }) {
+  const inputRef = useRef(null)
+  const [pickError, setPickError] = useState('')
+  const shownName = file ? file.name : (!removed && current ? current.name : null)
+
+  const handlePick = (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''   // permet de re-choisir le même fichier
+    if (!f) return
+    const problem = checkPlanFile(f)
+    setPickError(problem || '')
+    if (!problem) onFile(f)
+  }
+
+  return (
+    <div className="mb-3 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-500 flex-1 min-w-[8rem]">📋 Plan de concert <span className="text-gray-400">(optionnel)</span></span>
+        <input ref={inputRef} type="file" accept="application/pdf,.pdf" onChange={handlePick} className="sr-only" tabIndex={-1} />
+        <button
+          type="button"
+          onClick={() => withAdmin(() => inputRef.current?.click())}
+          className="px-3 py-1 rounded-lg text-xs font-medium border border-blue-300 text-blue-600 dark:text-blue-400"
+        >{shownName ? 'Remplacer' : '+ PDF'}</button>
+        {shownName && (
+          <button
+            type="button"
+            onClick={() => withAdmin(() => { setPickError(''); onRemove() })}
+            className="px-3 py-1 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-500"
+          >Retirer</button>
+        )}
+      </div>
+      {shownName && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 truncate">{file ? '⬆ ' : ''}{shownName}</p>}
+      {pickError && <p className="text-xs text-red-500 mt-1">{pickError}</p>}
     </div>
   )
 }
@@ -1134,12 +1189,15 @@ function SortableSongList({ allSongs, selectedIds, onChange }) {
   )
 }
 
-function NewSetForm({ songs, onSave, onCancel }) {
+function NewSetForm({ songs, onSave, onCancel, withAdmin }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [type, setType] = useState('repetition')
   const [selectedSongs, setSelectedSongs] = useState([])
   const [visibility, setVisibility] = useState('private')
+  const [planFile, setPlanFile] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const directorUnlocked = useStore((s) => s.directorUnlocked)
 
   const toggleSong = (id) => setSelectedSongs((prev) =>
@@ -1160,6 +1218,9 @@ function NewSetForm({ songs, onSave, onCancel }) {
           <option value="concert">Concert</option>
         </select>
       </div>
+      {type === 'concert' && (
+        <SetPlanField current={null} file={planFile} removed={false} onFile={setPlanFile} onRemove={() => setPlanFile(null)} withAdmin={withAdmin} />
+      )}
       {directorUnlocked && (
         <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
           <span className="text-xs text-gray-500 flex-1">Visibilité du set</span>
@@ -1188,16 +1249,25 @@ function NewSetForm({ songs, onSave, onCancel }) {
       <SortableSongList allSongs={songs} selectedIds={selectedSongs} onChange={setSelectedSongs} />
       <div className="flex gap-2 mt-3">
         <button
-          onClick={() => { if (!name.trim()) return; onSave({ name, date, type, songIds: selectedSongs, visibility }) }}
-          className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
-        >Créer</button>
+          disabled={saving}
+          onClick={() => {
+            if (!name.trim()) return
+            const pending = onSave({ name, date, type, songIds: selectedSongs, visibility, planFile: type === 'concert' ? planFile : null })
+            if (pending?.then) {
+              setSaving(true); setSaveError('')
+              pending.catch((e) => { setSaveError(e.message); setSaving(false) })
+            }
+          }}
+          className="flex-1 py-2 bg-blue-600 disabled:opacity-60 text-white rounded-lg text-sm font-medium"
+        >{saving ? 'Envoi du plan…' : 'Créer'}</button>
         <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500">Annuler</button>
       </div>
+      {saveError && <p className="text-xs text-red-500 mt-2">{saveError}</p>}
     </div>
   )
 }
 
-function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
+function SetCard({ set, songs, onDelete, onUpdate, onSaveEdit, withAdmin, onSetArrangement }) {
   const [expanded, setExpanded]               = useState(false)
   const [showEditForm, setShowEditForm]       = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -1288,11 +1358,19 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
               set={set}
               songs={songs}
               directorUnlocked={directorUnlocked}
-              onSave={(updates) => { onUpdate(updates); setShowEditForm(false) }}
+              withAdmin={withAdmin}
+              onSave={(data) => {
+                const pending = onSaveEdit(data)
+                if (pending?.then) return pending.then(() => setShowEditForm(false))
+                setShowEditForm(false)
+              }}
               onCancel={() => setShowEditForm(false)}
             />
           ) : (
             <>
+              {set.planPdf && (
+                <p className="text-xs text-gray-500 pt-2 truncate">📋 Plan : {set.planPdf.name}</p>
+              )}
               {/* Liste des chants */}
               {setSongs.length === 0 && <p className="text-xs text-gray-400 py-2">Aucun chant</p>}
               {setSongs.map((song, idx) => (
@@ -1427,12 +1505,16 @@ function SetCard({ set, songs, onDelete, onUpdate, onSetArrangement }) {
   )
 }
 
-function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
+function EditSetForm({ set, songs, directorUnlocked, withAdmin, onSave, onCancel }) {
   const [name, setName]               = useState(set.name || '')
   const [date, setDate]               = useState(set.date || new Date().toISOString().slice(0, 10))
   const [type, setType]               = useState(set.type || 'repetition')
   const [selectedSongs, setSelectedSongs] = useState(set.songIds || [])
   const [visibility, setVisibility]   = useState(set.visibility || 'private')
+  const [planFile, setPlanFile]       = useState(null)
+  const [planRemoved, setPlanRemoved] = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [saveError, setSaveError]     = useState('')
 
   const toggleSong = (id) => setSelectedSongs((prev) =>
     prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
@@ -1440,7 +1522,16 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
 
   const handleSave = () => {
     if (!name.trim()) return
-    onSave({ name: name.trim(), date, type, songIds: selectedSongs, visibility })
+    const isConcert = type === 'concert'
+    const pending = onSave({
+      name: name.trim(), date, type, songIds: selectedSongs, visibility,
+      planFile: isConcert ? planFile : null,
+      planRemoved: isConcert && planRemoved && !planFile && !!set.planPdf,
+    })
+    if (pending?.then) {
+      setSaving(true); setSaveError('')
+      pending.catch((e) => { setSaveError(e.message); setSaving(false) })
+    }
   }
 
   return (
@@ -1468,6 +1559,16 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
           <option value="concert">Concert</option>
         </select>
       </div>
+      {type === 'concert' && (
+        <SetPlanField
+          current={set.planPdf}
+          file={planFile}
+          removed={planRemoved}
+          onFile={(f) => { setPlanFile(f); setPlanRemoved(false) }}
+          onRemove={() => { setPlanFile(null); setPlanRemoved(true) }}
+          withAdmin={withAdmin}
+        />
+      )}
       {directorUnlocked && (
         <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
           <span className="text-xs text-gray-500 flex-1">Visibilité</span>
@@ -1495,9 +1596,10 @@ function EditSetForm({ set, songs, directorUnlocked, onSave, onCancel }) {
       </div>
       <SortableSongList allSongs={songs} selectedIds={selectedSongs} onChange={setSelectedSongs} />
       <div className="flex gap-2 mt-3">
-        <button onClick={handleSave} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Enregistrer</button>
+        <button onClick={handleSave} disabled={saving} className="flex-1 py-2 bg-blue-600 disabled:opacity-60 text-white rounded-lg text-sm font-medium">{saving ? 'Envoi du plan…' : 'Enregistrer'}</button>
         <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500">Annuler</button>
       </div>
+      {saveError && <p className="text-xs text-red-500 mt-2">{saveError}</p>}
     </div>
   )
 }

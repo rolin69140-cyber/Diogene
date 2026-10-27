@@ -46,6 +46,7 @@ export default function Concert() {
   const [instBtnId, setInstBtnId] = useState(null)
   const [notesSongId, setNotesSongId]       = useState(null)
   const [directorSongId, setDirectorSongId] = useState(null)
+  const [planOpen, setPlanOpen]             = useState(false)
   const holdStopRef = useRef(null)
   const [activeSetId, setActiveSetId] = useState(null)
   const [activeSongIdx, setActiveSongIdx] = useState(0)
@@ -347,7 +348,7 @@ export default function Concert() {
       {currentSong && (
         <div className="px-4 pt-2 pb-1 flex flex-col gap-1.5">
           {/* Boutons permanents */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setNotesSongId(currentSong.id)}
               className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 active:opacity-70 transition-opacity"
@@ -368,6 +369,16 @@ export default function Concert() {
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
               )}
             </button>
+            {/* Plan de concert — PDF propre au set affiché (absent = pas de bouton) */}
+            {activeSet?.planPdf && (
+              <button
+                onClick={() => setPlanOpen(true)}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-600 dark:text-sky-400 active:opacity-70 transition-opacity"
+                title="Plan de concert"
+              >
+                📋 Plan
+              </button>
+            )}
             {/* Paroles/PDF — chants sans audio uniquement (les autres l'ont dans le lecteur) */}
             {!currentSong.audioButtons?.length && songHasLyrics(currentSong) && (
               <button
@@ -494,6 +505,18 @@ export default function Concert() {
     {lyricsState?.isOpen && (
       <Suspense fallback={null}>
         <Paroles songId={lyricsState.songId} initialPdfId={lyricsState.pdfId} onClose={closeLyrics} />
+      </Suspense>
+    )}
+    {planOpen && activeSet?.planPdf && (
+      <Suspense fallback={null}>
+        <Paroles
+          key={activeSet.planPdf.fileId}
+          doc={{
+            name: activeSet.name,
+            pdfFiles: [{ id: activeSet.planPdf.fileId, fileId: activeSet.planPdf.fileId, name: activeSet.planPdf.name, label: 'Plan', storageUrl: activeSet.planPdf.storageUrl }],
+          }}
+          onClose={() => setPlanOpen(false)}
+        />
       </Suspense>
     )}
     {notesSongId && (

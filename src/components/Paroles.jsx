@@ -134,10 +134,11 @@ function usePinchZoom(zoom, setZoom, getScrollEl) {
   return { attachPinch, pendingScrollRef }
 }
 
-export default function Paroles({ songId, onClose, initialPdfId }) {
+// doc : document autonome { name, pdfFiles } affiché à la place d'un chant (ex. plan de concert d'un set)
+export default function Paroles({ songId, onClose, initialPdfId, doc }) {
   const songs     = useStore((s) => s.songs)
   const updateSong = useStore((s) => s.updateSong)
-  const song = songs.find((s) => s.id === songId)
+  const song = doc || songs.find((s) => s.id === songId)
 
   const [editing,  setEditing]  = useState(false)
   const [text,     setText]     = useState(song?.lyricsText || '')
