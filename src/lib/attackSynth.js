@@ -65,13 +65,21 @@ const NOTE_FR_MAP  = { do: 'C', ré: 'D', re: 'D', mi: 'E', fa: 'F', sol: 'G', l
 const NOTE_BASE_HZ = { C: 261.63, D: 293.66, E: 329.63, F: 349.23, G: 392.0, A: 440.0, B: 493.88 }
 const NOTE_SEMI    = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 }
 
+// Octave utilisée quand une note d'attaque est saisie sans octave ("G#" au lieu de "G#3") :
+// médium de chaque pupitre, pour que le bouton ne reste jamais muet.
+const DEFAULT_ATTACK_OCTAVE = { B: 3, T: 3, A: 3, S: 4 }
+export const defaultAttackOctave = (pupitre) => DEFAULT_ATTACK_OCTAVE[pupitre] ?? 3
+
 // "do4", "la#3", "sol3bémol" → Hz
-export function noteStrToFreq(noteStr) {
+// defaultOctave : octave à supposer si la note n'en a pas ; sans lui, une note sans octave n'est pas jouée.
+export function noteStrToFreq(noteStr, defaultOctave = null) {
   if (!noteStr) return null
   const s = String(noteStr).trim().toLowerCase().replace('♭', 'b').replace('♯', '#')
-  const m = s.match(/^([a-zÀ-ÿ]+?)(#|bb|b|bémol|bemol|dièse|diese)?(\d+)(#|bb|b|bémol|bemol|dièse|diese)?$/)
+  const m = s.match(/^([a-zÀ-ÿ]+?)(#|bb|b|bémol|bemol|dièse|diese)?(\d*)(#|bb|b|bémol|bemol|dièse|diese)?$/)
   if (!m) return null
-  const [, name, a1, octStr, a2] = m
+  const [, name, a1, octDigits, a2] = m
+  if (octDigits === '' && defaultOctave == null) return null
+  const octStr = octDigits === '' ? String(defaultOctave) : octDigits
   const alt    = a1 || a2
   const letter = NOTE_FR_MAP[name] || name.toUpperCase()
   const base   = NOTE_BASE_HZ[letter]
@@ -164,4 +172,11 @@ export function playPupitre(attackNotes, instrument = 'piano', bpm = 80, volume 
   if (!attackNotes?.length) return
   const freqs = attackNotes.map(noteStrToFreq).filter(Boolean)
   if (freqs.length) playNotes(freqs, instrument, bpm, volume)
+}
+
+// État d'une note saisie dans l'éditeur : 'empty' | 'ok' | 'noOctave' (jouée, mais en octave par défaut) | 'invalid'
+export function attackNoteStatus(noteStr) {
+  if (!noteStr || !String(noteStr).trim()) return 'empty'
+  if (noteStrToFreq(noteStr) != null) return 'ok'
+  return noteStrToFreq(noteStr, 3) != null ? 'noOctave' : 'invalid'
 }

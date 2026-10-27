@@ -22,7 +22,7 @@ import { noteStrToFreq as _noteStrToFreq } from './attackSynth.js'
 import { registerAudioContext } from './audioResume.js'
 
 // Re-export pour les modules appelants (Concert, Repetition)
-export { noteStrToFreq } from './attackSynth.js'
+export { noteStrToFreq, defaultAttackOctave } from './attackSynth.js'
 
 // ─── AudioContext partagé — créé lazily dans le 1er geste (iOS-safe) ──────
 let _ctx  = null

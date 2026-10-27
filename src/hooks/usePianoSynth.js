@@ -24,11 +24,12 @@ function noteToFreq(noteStr, transposition = 0) {
   if (!noteStr) return null
   const s = noteStr.trim().toLowerCase()
   // Formats supportés : "F#4", "F4#", "Fb4", "F4b", "fa#4", "fa4#", "sol4", etc.
-  const match = s.match(/^([a-zÀ-ÿ]+)([#b]?)(\d+)([#b]?)$/)
+  const match = s.match(/^([a-zÀ-ÿ]+)([#b]?)(\d*)([#b]?)$/)
   if (!match) return null
   const [, name, alt1, octStr, alt2] = match
   const alt = alt1 || alt2   // altération avant ou après le chiffre d'octave
-  const oct = parseInt(octStr)
+  // Note saisie sans octave (« G# ») : octave 3 par défaut plutôt que de rester muette
+  const oct = octStr === '' ? 3 : parseInt(octStr)
   const letter = NOTE_FR_MAP[name] || name.toUpperCase()
   const base = NOTE_FREQ[letter]
   if (!base) return null

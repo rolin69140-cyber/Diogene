@@ -6,7 +6,7 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import SetPlaybackModal from '../components/SetPlaybackModal'
 import NotesModal from '../components/NotesModal'
 import DirectorNotesModal from '../components/DirectorNotesModal'
-import { noteStrToFreq, startHoldNote } from '../lib/sampleSynth'
+import { noteStrToFreq, defaultAttackOctave, startHoldNote } from '../lib/sampleSynth'
 import { getAvailableVoices } from '../lib/voiceHelpers'
 import useDirectorNotes from '../hooks/useDirectorNotes'
 import { resolveSingleTrack, isMultiTrackDisabled, songHasLyrics, getSongPdfs } from '../lib/songPlayback'
@@ -267,7 +267,7 @@ export default function Concert() {
                   onPointerDown={(e) => {
                     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
 
-                    const freqs = notes.map(noteStrToFreq).filter(Boolean)
+                    const freqs = notes.map((n) => noteStrToFreq(n, defaultAttackOctave(p))).filter(Boolean)
                     holdStopRef.current?.()
                     holdStopRef.current = startHoldNote(freqs, settings.instrumentAttaque || 'piano', 0.7)
                     if (hint) speakHint(hint)

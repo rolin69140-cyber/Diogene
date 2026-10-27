@@ -5,6 +5,13 @@ import useLibrary from '../hooks/useLibrary'
 import useBgImage from '../hooks/useBgImage'
 import { findTuttiButton } from '../lib/songPlayback'
 import SongMediaBadges from '../components/SongMediaBadges'
+import { attackNoteStatus } from '../lib/attackSynth'
+
+// Bordure d'une case « note d'attaque » : rouge = note non reconnue (muette), ambre = octave absente (jouée en octave par défaut)
+const noteBorder = (v) => {
+  const st = attackNoteStatus(v)
+  return st === 'invalid' ? 'border-red-400 dark:border-red-500' : st === 'noOctave' ? 'border-amber-400 dark:border-amber-500' : ''
+}
 
 const TABS = ['Chants', 'Sets', 'Notes d\'attaque']
 
@@ -722,6 +729,19 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                 )}
               </div>
               <p className="text-xs text-gray-500 mt-1">Notes d'attaque <span className="text-gray-400">(ex: Do3, Mi3)</span></p>
+              {(() => {
+                const vals = Object.values(editNotes).flat()
+                const invalid = vals.some((v) => attackNoteStatus(v) === 'invalid')
+                const noOct = vals.some((v) => attackNoteStatus(v) === 'noOctave')
+                if (!invalid && !noOct) return null
+                return (
+                  <p className={`text-xs ${invalid ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {invalid
+                      ? '⚠ Note non reconnue (case rouge) : elle ne sera pas jouée. Format : lettre + octave, ex. G#3 ou Sol3.'
+                      : '⚠ Octave absente (case orange) : la note sera jouée à l\'octave médiane du pupitre. Ajoutez le chiffre, ex. G#3.'}
+                  </p>
+                )
+              })()}
               {[...PUPITRES, ...(song.buttonLabels?.['5'] ? ['5'] : [])].map((p) => (
                 <div key={p} className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
@@ -732,13 +752,13 @@ function SongCard({ song, allSongs, onDelete, onMerge, onImportLyrics, onImportA
                     value={editNotes[p]?.[0] || ''}
                     onChange={(e) => setEditNotes((n) => ({ ...n, [p]: [e.target.value, n[p]?.[1] || ''] }))}
                     placeholder="Note 1"
-                    className="flex-1 border rounded px-2 py-1.5 text-sm dark:bg-gray-900 dark:border-gray-700"
+                    className={`flex-1 border rounded px-2 py-1.5 text-sm dark:bg-gray-900 dark:border-gray-700 ${noteBorder(editNotes[p]?.[0])}`}
                   />
                   <input
                     value={editNotes[p]?.[1] || ''}
                     onChange={(e) => setEditNotes((n) => ({ ...n, [p]: [n[p]?.[0] || '', e.target.value] }))}
                     placeholder="Note 2"
-                    className="flex-1 border rounded px-2 py-1.5 text-sm dark:bg-gray-900 dark:border-gray-700"
+                    className={`flex-1 border rounded px-2 py-1.5 text-sm dark:bg-gray-900 dark:border-gray-700 ${noteBorder(editNotes[p]?.[1])}`}
                   />
                 </div>
               ))}
@@ -1642,13 +1662,13 @@ function NotesAttaqueTab() {
                             value={grid[song.id]?.[p]?.[0] || ''}
                             onChange={(e) => handleChange(song.id, p, 0, e.target.value)}
                             placeholder="Note 1"
-                            className="w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                            className={`w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none ${noteBorder(grid[song.id]?.[p]?.[0])}`}
                           />
                           <input
                             value={grid[song.id]?.[p]?.[1] || ''}
                             onChange={(e) => handleChange(song.id, p, 1, e.target.value)}
                             placeholder="Note 2"
-                            className="w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none"
+                            className={`w-full border rounded px-1 py-1 text-xs text-center dark:bg-gray-900 dark:border-gray-700 focus:border-blue-400 focus:outline-none ${noteBorder(grid[song.id]?.[p]?.[1])}`}
                           />
                           <input
                             value={hints[song.id]?.[p] || ''}
